@@ -180,3 +180,11 @@ async def test_a_rule_without_a_zone_never_calls_sam(world):
     for _ in range(10):
         await world.see(EMPTY, seconds=30)
     assert len(world.router.adapters.segmenter.calls) == before
+
+
+def test_without_a_before_frame_every_statement_is_the_condition():
+    from backend.schemas import Condition, Rule, Subject
+
+    rule = Rule(household_id=1, created_by=1, original_text="x", subject=Subject.PERSON, zone_object="sofa",
+                condition=Condition.NO_PERSON_NEAR, duration_sec=60, notify=[1], language="en")
+    assert frame_statements(rule, 2, has_before=False) == ["no person is near the sofa"] * 2

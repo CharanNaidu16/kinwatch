@@ -28,7 +28,7 @@ log = logging.getLogger("kinwatch.watcher")
 SUBJECT_CONCEPTS = {Subject.PERSON: "person", Subject.DOG: "dog", Subject.CAT: "cat", Subject.FLAME: "flame"}
 GUARD_STALE_SEC = 90  # a guard reading older than this counts as unknown
 
-EventHandler = Callable[[Rule, Transition, list[Frame], Zone], Awaitable[None]]
+EventHandler = Callable[[Rule, Transition, list[Frame], Zone, bool], Awaitable[None]]
 
 
 @dataclass
@@ -218,8 +218,10 @@ class Watcher:
             if t.kind == "fired" and self.on_event is not None and rt.zone is not None:
                 latest = self.frames.latest() or frame
                 evidence = [f for f in (rt.last_held_false, rt.pending_frame, latest) if f is not None]
+                # Without a frame from before the condition started, every frame shows it holding.
+                has_before = rt.last_held_false is not None
                 try:
-                    await self.on_event(rule, t, evidence, rt.zone)
+                    await self.on_event(rule, t, evidence, rt.zone, has_before)
                 except Exception:
                     log.exception("alert for rule %s failed", rule.id)
 

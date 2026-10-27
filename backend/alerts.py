@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from pathlib import Path
 
 from backend import templates
 from backend.clock import Clock, local_hhmm
@@ -40,8 +39,9 @@ def what_happened(rule: Rule) -> str:
     }[rule.condition]
 
 
-def frame_statements(rule: Rule, n: int) -> list[str]:
-    """One factual statement per evidence frame (first frame = before the condition started)."""
+def frame_statements(rule: Rule, n: int, has_before: bool = True) -> list[str]:
+    """One factual statement per evidence frame. With `has_before`, the first frame is from before the
+    condition started; without one (e.g. nobody was ever seen), every frame shows the condition."""
     who = "a person" if rule.subject.value == "person" else f"a {rule.subject.value}"
     zone = rule.zone_object
     holds = {
@@ -56,7 +56,9 @@ def frame_statements(rule: Rule, n: int) -> list[str]:
         Condition.ON_OBJECT: f"nothing is on the {zone}",
         Condition.NO_PERSON_NEAR: f"a person is near the {zone}",
     }[rule.condition]
-    return [before] + [holds] * (n - 1) if n > 1 else [holds]
+    if has_before and n > 1:
+        return [before] + [holds] * (n - 1)
+    return [holds] * n
 
 
 class Alerts:
@@ -73,7 +75,8 @@ class Alerts:
     def _members(self) -> dict[int, Member]:
         return {m.id: m for m in self.storage.members(self.household_id)}
 
-    async def on_event(self, rule: Rule, fired: Transition, evidence: list[Frame], zone: Zone) -> int:
+    async def on_event(self, rule: Rule, fired: Transition, evidence: list[Frame], zone: Zone,
+                       has_before: bool = True) -> int:
         now = self.clock.now()
         since = fired.data.get("since", now)
         facts = EventFacts(rule_id=rule.id, subject_name=rule.subject_name, subject=rule.subject,
@@ -104,15 +107,15 @@ class Alerts:
                                   f"{local_hhmm(now)} alert sent to {', '.join(m.name for m in recipients)}",
                                   rule_id=rule.id, data={"event_id": event_id, "alert_id": alert_id, "text": message})
 
-        task = asyncio.create_task(self._verify(event_id, rule, evidence))
+        task = asyncio.create_task(self._verify(event_id, rule, evidence, has_before))
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
         return alert_id
 
-    async def _verify(self, event_id: int, rule: Rule, evidence: list[Frame]) -> None:
+    async def _verify(self, event_id: int, rule: Rule, evidence: list[Frame], has_before: bool) -> None:
         frames = [TimedFrame(ts=f.ts, jpeg=f.jpeg) for f in evidence]
         try:
-            v = await self.adapters.spark.confirm_event(frames, frame_statements(rule, len(frames)))
+            v = await self.adapters.spark.confirm_event(frames, frame_statements(rule, len(frames), has_before))
             result = {"consistent": v.consistent, "visible_summary": v.visible_summary, "confidence": v.confidence}
         except Exception as exc:  # advisory: an error changes nothing for the family
             result = {"error": str(exc)[:200]}

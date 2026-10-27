@@ -806,6 +806,12 @@ Total is well under $0.10. **Step 0 outputs stay in `scratch/` only (gitignored)
 - **While a change is settling (seen, not yet confirmed by the debouncer), SAM is called at the minimum interval** instead of the heartbeat, so a leave/return is confirmed in ~10 s. Costs ~2 extra calls per real change.
 - The confirmation photo outlines the **column-filled** zone (the whole sofa, not SAM's mask with a hole where the person lies), which is also exactly what the engine tests against.
 
+**Thursday milestone passed live on Tue 27 Oct, 17:55 IST (Telegram).** Typed rule → Spark → SAM outlined the sofa on the camera phone's frame → confirmed → watched → "nobody near the sofa for 1 minute" fired once → photo alert → claimed. Lessons from the live run:
+- **Phones with auto-rotate off send the picture turned 90°** and SAM didn't find the sofa in it. Added a ↻ rotate button on the camera page and a free `check` command that sends back the latest frame (the first thing people tried was "can you see?").
+- **People talk to the bot conversationally** ("Check now", "Now can u see"). Every unrecognised message is parsed as a new rule, which is fine but chatty; the `check` command covers the most common case.
+- **Spark's evidence check needs to know whether a "before" frame exists**; when nobody was ever seen, all frames are labelled with the condition (fixed).
+- Total live spend so far: 31 calls, $0.1050.
+
 **Design changes from calls 1–2 (26 Oct):**
 - **Code-side validation is necessary, not optional.** Constrained decoding guarantees the shape, not the meaning. The validator **drops `guard` unless the condition is `NO_PERSON_NEAR`**, and a few-shot example with `guard: null` is added.
 - **Reasoning tokens dominate cost and latency.** Try `reasoning_effort="minimal"` in test call 3 (vision). If quality holds, use "minimal" for restatement, alert writing and reply classification, and keep "low" for rule parsing only. Budget estimate per Spark call: assume ~2k output tokens (≈ $0.009) until measured. Per-event Spark cost (verify + write) is ≈ $0.02, still trivial.
