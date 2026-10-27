@@ -101,6 +101,16 @@ _TEXTS: dict[str, dict[Language, str]] = {
         "hi": "{name} पहले से इसे देख रहे हैं।",
         "kn": "{name} ಈಗಾಗಲೇ ಇದನ್ನು ನೋಡಿಕೊಳ್ಳುತ್ತಿದ್ದಾರೆ.",
     },
+    "camera_view": {
+        "en": "This is what the camera sees right now.",
+        "hi": "कैमरे में अभी यह दिख रहा है।",
+        "kn": "ಕ್ಯಾಮೆರಾದಲ್ಲಿ ಈಗ ಇದು ಕಾಣುತ್ತಿದೆ.",
+    },
+    "camera_view_upright": {
+        "en": " The picture is upright: if it's sideways, tap ↻ on the camera page.",
+        "hi": " तस्वीर खड़ी है: अगर टेढ़ी दिखे, तो कैमरा पेज पर ↻ दबाएँ।",
+        "kn": " ಚಿತ್ರ ನೇರವಾಗಿ ನಿಂತಿದೆ: ಓರೆಯಾಗಿ ಕಂಡರೆ ಕ್ಯಾಮೆರಾ ಪುಟದಲ್ಲಿ ↻ ಒತ್ತಿ.",
+    },
     "button_yes": {"en": "Yes ✓", "hi": "हाँ ✓", "kn": "ಹೌದು ✓"},
     "button_no": {"en": "No ✗", "hi": "नहीं ✗", "kn": "ಇಲ್ಲ ✗"},
     "clarify_time_window": {

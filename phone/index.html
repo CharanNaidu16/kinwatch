@@ -22,7 +22,8 @@
   .ok #dot { background:var(--ok); } .warn #dot { background:var(--warn); } .bad #dot { background:var(--bad); }
   #details { color:var(--muted); font-size:14px; display:none; }
   #error { color:#ffb4b4; max-width:30em; display:none; }
-  #dimBtn { background:#2a2f34; color:var(--fg); display:none; }
+  #dimBtn, #rotateBtn { background:#2a2f34; color:var(--fg); display:none; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
   #dim { position:fixed; inset:0; background:#000; display:none; z-index:10; }
   #dim span { position:absolute; right:14px; bottom:14px; width:8px; height:8px; border-radius:50%; background:var(--ok); opacity:.6; }
 </style>
@@ -37,7 +38,10 @@
   <div id="status"><span id="dot"></span><span id="statusText"></span></div>
   <div id="details"></div>
   <p id="error"></p>
-  <button id="dimBtn">Dim screen · स्क्रीन धीमी करें</button>
+  <div class="row">
+    <button id="rotateBtn" title="Rotate the picture">↻ Rotate · घुमाएँ</button>
+    <button id="dimBtn">Dim screen · स्क्रीन धीमी करें</button>
+  </div>
 </main>
 <div id="dim" title="Tap to wake"><span></span></div>
 <canvas id="canvas" hidden></canvas>
@@ -62,6 +66,12 @@ const token = readToken();
 let stream = null, track = null, wakeLock = null;
 let intervalMs = 1500, failures = 0, inFlight = false, timer = null;
 let lastOk = null, armedRules = 0;
+let rotation = 0;  // degrees clockwise applied to uploaded frames (for phones with auto-rotate off)
+try { rotation = parseInt(localStorage.getItem("kinwatch_rotation") || "0", 10) || 0; } catch (e) {}
+
+function applyRotationPreview() {
+  $("preview").style.transform = rotation ? `rotate(${rotation}deg)` : "";
+}
 
 function setStatus(kind, text) {
   $("status").className = kind;
@@ -104,10 +114,17 @@ function grab() {
   const v = $("preview");
   if (!v.videoWidth) return Promise.resolve(null);
   const scale = Math.min(1, TARGET_WIDTH / Math.max(v.videoWidth, v.videoHeight));
+  const w = Math.round(v.videoWidth * scale), h = Math.round(v.videoHeight * scale);
+  const sideways = rotation === 90 || rotation === 270;
   const c = $("canvas");
-  c.width = Math.round(v.videoWidth * scale);
-  c.height = Math.round(v.videoHeight * scale);
-  c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+  c.width = sideways ? h : w;
+  c.height = sideways ? w : h;
+  const ctx = c.getContext("2d");
+  ctx.save();
+  ctx.translate(c.width / 2, c.height / 2);
+  ctx.rotate(rotation * Math.PI / 180);
+  ctx.drawImage(v, -w / 2, -h / 2, w, h);
+  ctx.restore();
   return new Promise((resolve) => c.toBlob(resolve, "image/jpeg", JPEG_QUALITY));
 }
 
@@ -171,6 +188,8 @@ $("start").addEventListener("click", async () => {
   $("start").style.display = "none";
   $("intro").style.display = "none";
   $("dimBtn").style.display = "inline-block";
+  $("rotateBtn").style.display = "inline-block";
+  applyRotationPreview();
   setStatus("ok", "Starting · शुरू हो रहा है");
   await keepAwake();
   tick();
@@ -178,6 +197,11 @@ $("start").addEventListener("click", async () => {
 });
 
 $("dimBtn").addEventListener("click", () => { $("dim").style.display = "block"; });
+$("rotateBtn").addEventListener("click", () => {
+  rotation = (rotation + 90) % 360;
+  try { localStorage.setItem("kinwatch_rotation", String(rotation)); } catch (e) {}
+  applyRotationPreview();
+});
 $("dim").addEventListener("click", () => { $("dim").style.display = "none"; });
 </script>
 </body>

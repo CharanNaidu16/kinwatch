@@ -63,6 +63,17 @@ def is_no(message: str) -> bool:
     return len(w) > 0 and w[0] in NO_WORDS
 
 
+VIEW_WORDS = {"check", "camera", "photo", "picture", "snapshot", "view", "dikhao", "दिखाओ", "कैमरा", "ತೋರಿಸು", "ಕ್ಯಾಮೆರಾ"}
+VIEW_PHRASES = ("can you see", "can u see", "what do you see", "what can you see", "kya dikh", "क्या दिख")
+
+
+def wants_camera_view(message: str) -> bool:
+    """'check', 'camera', 'can you see?': send back the latest frame. Free: no model is involved."""
+    w = _words(message)
+    joined = " ".join(w)
+    return (0 < len(w) <= 4 and w[0] in VIEW_WORDS) or any(p in joined for p in VIEW_PHRASES)
+
+
 @dataclass
 class Conversation:
     member_id: int
@@ -216,6 +227,8 @@ class Router:
         return heard
 
     async def _message(self, message: str, kind: Literal["text", "voice"], member: Member, conv: Conversation) -> None:
+        if wants_camera_view(message):
+            return await self._camera_view(member, self._language(message))
         if conv.state == "awaiting_confirmation":
             return await self._confirmation_reply(message, member, conv)
         if conv.state == "awaiting_clarification":
@@ -224,6 +237,15 @@ class Router:
                                         rounds=int(conv.data.get("rounds", 0)) + 1,
                                         transcript=conv.data.get("transcript") or (message if kind == "voice" else None))
         await self._new_rule(message, kind, member, rounds=0, transcript=message if kind == "voice" else None)
+
+    async def _camera_view(self, member: Member, lang: Language) -> None:
+        frame = self.frames.latest(self.clock.now(), FRESH_FRAME_SEC) if self.frames is not None else None
+        if frame is None:
+            return await self.send(member, "info", text("camera_offline", lang))
+        caption = text("camera_view", lang)
+        if frame.height > frame.width:
+            caption += text("camera_view_upright", lang)
+        await self.send(member, "info", caption, jpeg=frame.jpeg)
 
     async def _confirmation_reply(self, message: str, member: Member, conv: Conversation) -> None:
         rule = self.storage.get_rule(conv.rule_id) if conv.rule_id else None

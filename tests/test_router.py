@@ -192,3 +192,20 @@ def test_no_the_other_one_switches_bed(client, storage):
     post(client, wa.button(PRIYA, f"pick:{rule_id}:1", msg_id="m2"))
     post(client, wa.text(PRIYA, "नहीं, दूसरा वाला", "m3"))  # mock Spark: "the other one"
     assert storage.query_one("SELECT zone_instance FROM rules")["zone_instance"] == 2
+
+
+@pytest.mark.parametrize("message", ["check", "Check now", "camera", "Now can u see", "kya dikh raha hai"])
+def test_camera_view_command_sends_the_latest_frame(client, storage, message):
+    camera(client)
+    post(client, wa.text(PRIYA, message, "m1"))
+    reply = outbox(client)[-1]
+    assert reply.kind == "image" and reply.text.startswith(("This is what the camera sees", "कैमरे में अभी"))
+    assert storage.query_one("SELECT COUNT(*) AS n FROM rules")["n"] == 0
+    assert client.app.state.router.adapters.segmenter.calls == []  # free: no SAM
+
+
+def test_camera_view_warns_about_an_upright_picture(client):
+    token = client.app.state.settings.device_token.get_secret_value()
+    client.post("/api/frame", content=synthetic_frame(ONE_BED, size=(360, 640)), headers={"X-Device-Token": token})
+    post(client, wa.text(PRIYA, "check", "m1"))
+    assert "↻" in outbox(client)[-1].text
