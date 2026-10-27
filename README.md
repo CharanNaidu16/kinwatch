@@ -28,6 +28,19 @@ uvicorn backend.main:app
 
 `GET /healthz` reports the mode; `GET /api/budget?t=<BTS_TOKEN>` shows API usage and caps.
 
+## Run it live on your laptop
+
+Needs [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
+(`winget install Cloudflare.cloudflared`) for a free HTTPS tunnel.
+
+```bash
+python scripts/dev_up.py
+```
+
+It starts the app and a Cloudflare quick tunnel, prints the camera link to open on the phone that
+will act as the camera, and with `MESSENGER=whatsapp` points the WhatsApp webhook at the new tunnel
+URL. Set `USE_MOCKS=false` and `META_API_KEY` to use the real Meta models.
+
 ## Check your Meta API key (about $0.02)
 
 ```bash

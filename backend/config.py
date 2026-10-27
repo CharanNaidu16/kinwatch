@@ -43,7 +43,9 @@ class Settings(BaseSettings):
     asr_model: str = "muse-voice-transcribe-1.0"
     record_fixtures: bool = False  # save real responses under fixtures/recorded/ (names scrubbed)
 
+    messenger: Literal["mock", "whatsapp"] = "mock"
     wa_graph_version: str = "v25.0"
+    wa_app_id: str | None = None  # lets scripts/dev_up.py update the webhook URL on each run
     wa_phone_number_id: str | None = None
     wa_business_account_id: str | None = None
     wa_access_token: SecretStr | None = None

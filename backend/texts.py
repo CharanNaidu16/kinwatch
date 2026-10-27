@@ -35,6 +35,33 @@ _TEXTS: dict[str, dict[Language, str]] = {
         "hi": "{name} कौन हैं? मैं इन्हें बता सकता हूँ: {known}।",
         "kn": "{name} ಯಾರು? ನಾನು ಇವರಿಗೆ ತಿಳಿಸಬಲ್ಲೆ: {known}.",
     },
+    "heard": {
+        "en": "I heard: \"{text}\"",
+        "hi": "मैंने सुना: \"{text}\"",
+        "kn": "ನಾನು ಕೇಳಿದ್ದು: \"{text}\"",
+    },
+    "voice_failed": {
+        "en": "Sorry, I couldn't hear that voice note. Could you send it again, or type it?",
+        "hi": "माफ़ कीजिए, मैं यह वॉइस नोट सुन नहीं पाया। फिर से भेजें या लिखकर भेजें।",
+        "kn": "ಕ್ಷಮಿಸಿ, ಈ ವಾಯ್ಸ್ ನೋಟ್ ಕೇಳಿಸಲಿಲ್ಲ. ಮತ್ತೆ ಕಳುಹಿಸಿ ಅಥವಾ ಟೈಪ್ ಮಾಡಿ.",
+    },
+    "armed": {
+        "en": "✅ Rule is on.",
+        "hi": "✅ नियम चालू।",
+        "kn": "✅ ನಿಯಮ ಚಾಲೂ ಆಗಿದೆ.",
+    },
+    "not_set": {
+        "en": "Okay, I didn't set it. Tell me again what I should watch.",
+        "hi": "ठीक है, मैंने यह नियम नहीं बनाया। फिर से बताइए कि किस पर नज़र रखूँ।",
+        "kn": "ಸರಿ, ನಾನು ಈ ನಿಯಮ ಮಾಡಲಿಲ್ಲ. ಯಾವುದರ ಮೇಲೆ ಗಮನ ಇಡಬೇಕು ಎಂದು ಮತ್ತೆ ಹೇಳಿ.",
+    },
+    "error": {
+        "en": "Sorry, something went wrong on my side. Please try again in a minute.",
+        "hi": "माफ़ कीजिए, मेरी तरफ़ से कुछ गड़बड़ हो गई। एक मिनट बाद फिर कोशिश करें।",
+        "kn": "ಕ್ಷಮಿಸಿ, ನನ್ನ ಕಡೆಯಿಂದ ಏನೋ ತಪ್ಪಾಗಿದೆ. ಒಂದು ನಿಮಿಷದ ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    },
+    "button_yes": {"en": "Yes ✓", "hi": "हाँ ✓", "kn": "ಹೌದು ✓"},
+    "button_no": {"en": "No ✗", "hi": "नहीं ✗", "kn": "ಇಲ್ಲ ✗"},
     "clarify_time_window": {
         "en": "The start and end time are the same. From what time to what time should I watch?",
         "hi": "शुरू और खत्म होने का समय एक ही है। किस समय से किस समय तक नज़र रखूँ?",

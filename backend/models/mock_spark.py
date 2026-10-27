@@ -30,8 +30,8 @@ _MINUTES = re.compile(r"min|मिनट|ನಿಮಿಷ", re.IGNORECASE)
 
 def normalize(text: str) -> str:
     t = unicodedata.normalize("NFC", text).casefold()
-    t = re.sub(r"[^\w\s]", " ", t)
-    return " ".join(t.split())
+    # Drop punctuation and symbols only: `\w` would also drop Devanagari/Kannada vowel signs.
+    return " ".join("".join(" " if unicodedata.category(ch)[0] in "PSZ" else ch for ch in t).split())
 
 
 def detect_language(text: str) -> Language:
