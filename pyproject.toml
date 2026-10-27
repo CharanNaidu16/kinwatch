@@ -1,0 +1,12 @@
+[project]
+name = "kinwatch"
+version = "0.1.0"
+description = "A family member with eyes that lives in your WhatsApp."
+requires-python = ">=3.11"
+license = { text = "MIT" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

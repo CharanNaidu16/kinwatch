@@ -1,0 +1,41 @@
+[
+  {
+    "_note": "Hand-written synthetic fixture (27 Oct 2026), shaped like real muse-spark-1.3 output. Main scenario, Hindi voice transcript.",
+    "text": "पापा अगर रात को उठें और दस मिनट में वापस न आएँ तो मुझे और राहुल को बताना",
+    "response": {"status": "ok", "clarifying_question": null, "subject": "person", "subject_name": "पापा",
+                 "zone_object": "bed", "condition": "ABSENT_FROM_ZONE", "duration_sec": 600,
+                 "time_window": {"start": "22:00", "end": "06:00"}, "guard": null,
+                 "notify": ["me", "{MEMBER:2}"], "language": "hi"}
+  },
+  {
+    "_note": "Stove scenario, typed English.",
+    "text": "Tell me if the stove is on and nobody's in the kitchen for 5 minutes",
+    "response": {"status": "ok", "clarifying_question": null, "subject": "person", "subject_name": null,
+                 "zone_object": "gas stove", "condition": "NO_PERSON_NEAR", "duration_sec": 300,
+                 "time_window": null, "guard": {"subject": "flame", "zone_object": "gas stove"},
+                 "notify": ["me"], "language": "en"}
+  },
+  {
+    "_note": "Light scenario, typed Kannada: tell me when Appa comes back to the door after his walk.",
+    "text": "ಅಪ್ಪ ವಾಕಿಂಗ್ ಮುಗಿಸಿ ಬಾಗಿಲಿಗೆ ಬಂದ್ರೆ ಹೇಳು",
+    "response": {"status": "ok", "clarifying_question": null, "subject": "person", "subject_name": "ಅಪ್ಪ",
+                 "zone_object": "main door", "condition": "PRESENT_IN_ZONE", "duration_sec": 0,
+                 "time_window": null, "guard": null, "notify": ["me"], "language": "kn"}
+  },
+  {
+    "_note": "Health request: must be refused.",
+    "text": "Papa ki tabiyat kharab lage toh batana",
+    "response": {"status": "unsupported",
+                 "clarifying_question": "मैं सेहत के बारे में नहीं बता सकता। मैं बस यह बता सकता हूँ कि कैमरे में क्या दिखता है — जैसे पापा रात को बिस्तर से उठें और वापस न आएँ। क्या ऐसा नियम बनाऊँ?",
+                 "subject": "none", "subject_name": null, "zone_object": null, "condition": "none",
+                 "duration_sec": 0, "time_window": null, "guard": null, "notify": ["me"], "language": "hi"}
+  },
+  {
+    "_note": "Reproduces test call 2's mistake: a spurious guard on an ABSENT_FROM_ZONE rule. Validation must drop it.",
+    "text": "Tell me if Papa leaves his bed at night for 10 minutes",
+    "response": {"status": "ok", "clarifying_question": null, "subject": "person", "subject_name": "Papa",
+                 "zone_object": "bed", "condition": "ABSENT_FROM_ZONE", "duration_sec": 600,
+                 "time_window": {"start": "22:00", "end": "06:00"},
+                 "guard": {"subject": "person", "zone_object": "bed"}, "notify": ["everyone"], "language": "en"}
+  }
+]
