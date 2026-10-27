@@ -171,3 +171,12 @@ def test_statements_describe_each_frame():
                 condition=Condition.ABSENT_FROM_ZONE, duration_sec=600, notify=[1], language="hi")
     assert frame_statements(rule, 3) == ["a person is on or in the bed", "no person is on or in the bed",
                                          "no person is on or in the bed"]
+
+
+async def test_a_rule_without_a_zone_never_calls_sam(world):
+    rule_id = await arm(world)
+    world.watcher.runtimes[rule_id].zone = None
+    before = len(world.router.adapters.segmenter.calls)
+    for _ in range(10):
+        await world.see(EMPTY, seconds=30)
+    assert len(world.router.adapters.segmenter.calls) == before

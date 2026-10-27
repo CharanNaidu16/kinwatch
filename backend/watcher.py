@@ -108,8 +108,8 @@ class Watcher:
     def _concepts(self) -> dict[str, list[Runtime]]:
         out: dict[str, list[Runtime]] = {}
         for rt in self.runtimes.values():
-            if rt.engine.phase == Phase.OUT_OF_WINDOW:
-                continue
+            if rt.engine.phase == Phase.OUT_OF_WINDOW or rt.zone is None:
+                continue  # no zone, nothing to compare against: don't pay for SAM calls
             out.setdefault(rt.subject_concept, []).append(rt)
             if rt.guard_concept:
                 out.setdefault(rt.guard_concept, []).append(rt)
