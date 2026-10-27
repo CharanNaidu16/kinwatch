@@ -52,6 +52,8 @@ async def test_mock_spark_heuristics_for_unseen_sentences():
     assert (dog.subject, dog.condition, dog.language) == (Subject.DOG, Condition.ON_OBJECT, "kn")
     vague = await spark.parse_rule("keep an eye on things", ["Priya"], "Priya")
     assert vague.status == "needs_clarification"
+    sofa = await spark.parse_rule("पापा रात को सोफ़े से उठें और 10 मिनट में वापस न आएँ तो मुझे बताना", ["Priya"], "Priya")
+    assert (sofa.subject, sofa.condition, sofa.zone_object) == (Subject.PERSON, Condition.ABSENT_FROM_ZONE, "sofa")
 
 
 async def test_mock_spark_fills_member_placeholders():
@@ -110,6 +112,15 @@ def test_main_scenario_restatement_hindi():
         "अगर पापा बिस्तर छोड़कर 10 मिनट तक वापस नहीं आते, तो मैं Priya और Rahul को बताऊँगा। "
         "(मैं लोगों को गिनता हूँ, पहचानता नहीं।) सही है?"
     )
+
+
+def test_main_scenario_on_the_sofa_uses_hindi_oblique():
+    rule = _rule(Condition.ABSENT_FROM_ZONE, "hi", subject_name="पापा", zone_object="sofa",
+                 time_window=TimeWindow(start="22:00", end="06:00"))
+    text = templates.restatement(rule, 1, ["Priya"])
+    assert "इस सोफ़े पर नज़र" in text and "सोफ़ा छोड़कर" in text
+    door = _rule(Condition.PRESENT_IN_ZONE, "hi", zone_object="main door", duration_sec=0)
+    assert "मुख्य दरवाज़े के पास" in templates.restatement(door, 1, ["Priya"])
 
 
 def test_two_instances_ask_which_one():

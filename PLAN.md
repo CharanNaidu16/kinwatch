@@ -793,7 +793,7 @@ Total is well under $0.10. **Step 0 outputs stay in `scratch/` only (gitignored)
 - **Zone masks are column-filled** before the overlap test (§3.4). Without it, a person lying on the bed reads as "not in bed" (overlap 0.16), which would fire false alerts on the main scenario.
 - **Door zones use the "near" test** for PRESENT_IN_ZONE (§3.4).
 - **Budget numbers:** SAM ≈ 2.5–6 s per call (so the 1.5 s frame interval only matters for change detection; SAM runs at most every 2 s per subject, and latest-frame-wins drops the rest). Spark vision ≈ 400 input tokens per frame.
-- **Main scene furniture:** the demo is filmed on the sofa unless you have a bed to use. Either works; the rule says what the family says ("sofa" or "bed").
+- **Main scene furniture (decided 27 Oct):** filmed on the sofa, but the rule and every message say **"bed" (बिस्तर)**. `ZONE_CONCEPTS_JSON={"bed":"sofa"}` in `.env` maps the family's word to what SAM looks for, so the camera searches for "sofa" (tested, c = 0.88) while the family reads "bed." Whether SAM's "bed" alone would find the sofa was never tested; the mapping makes that irrelevant.
 
 **Design changes from calls 1–2 (26 Oct):**
 - **Code-side validation is necessary, not optional.** Constrained decoding guarantees the shape, not the meaning. The validator **drops `guard` unless the condition is `NO_PERSON_NEAR`**, and a few-shot example with `guard: null` is added.

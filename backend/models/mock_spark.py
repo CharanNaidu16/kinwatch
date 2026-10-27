@@ -81,16 +81,17 @@ class MockSpark:
         duration = n * 60 if n and _MINUTES.search(text) else (n or 0)
         if _NIGHT.search(text):
             base["time_window"] = {"start": "22:00", "end": "06:00"}
-        if _has(text, "bed", "बिस्तर", "ಹಾಸಿಗೆ", "papa", "पापा", "ಅಪ್ಪ") and _has(
-                text, "bed", "बिस्तर", "ಹಾಸಿಗೆ", "get up", "gets up", "उठ", "ಎದ್ದ"):
-            base.update(zone_object="bed", condition="ABSENT_FROM_ZONE", duration_sec=duration)
+        sofa = _has(text, "sofa", "सोफ़", "सोफ", "ಸೋಫಾ")
+        if sofa and _has(text, "dog", "कुत्त", "ನಾಯಿ"):
+            base.update(subject="dog", zone_object="sofa", condition="ON_OBJECT")
+        elif _has(text, "bed", "बिस्तर", "ಹಾಸಿಗೆ", "papa", "पापा", "ಅಪ್ಪ", "sofa", "सोफ़", "सोफ", "ಸೋಫಾ") and _has(
+                text, "bed", "बिस्तर", "ಹಾಸಿಗೆ", "get up", "gets up", "leave", "उठ", "छोड़", "ಎದ್ದ"):
+            base.update(zone_object="sofa" if sofa else "bed", condition="ABSENT_FROM_ZONE", duration_sec=duration)
         elif _has(text, "stove", "चूल्हा", "गैस", "ಸ್ಟೌ", "ಒಲೆ"):
             base.update(zone_object="gas stove", condition="NO_PERSON_NEAR", duration_sec=duration,
                         guard={"subject": "flame", "zone_object": "gas stove"})
         elif _has(text, "door", "दरवाज", "ಬಾಗಿಲ"):
             base.update(zone_object="main door", condition="PRESENT_IN_ZONE")
-        elif _has(text, "sofa", "सोफ़ा", "सोफा", "ಸೋಫಾ") and _has(text, "dog", "कुत्त", "ನಾಯಿ"):
-            base.update(subject="dog", zone_object="sofa", condition="ON_OBJECT")
         else:
             base.update(status="needs_clarification", subject="none")
         for word in ("papa", "पापा", "ಅಪ್ಪ", "appa"):

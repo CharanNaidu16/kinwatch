@@ -35,9 +35,21 @@ _COUNTS_PEOPLE = {
 }
 
 
-def zone_word(zone: str, lang: Language) -> str:
+# Hindi masculine -आ nouns take the oblique -े before a postposition: "सोफ़े पर", "दरवाज़े के पास".
+HINDI_OBLIQUE: dict[str, str] = {
+    "sofa": "सोफ़े",
+    "gas stove": "गैस चूल्हे",
+    "stove": "चूल्हे",
+    "main door": "मुख्य दरवाज़े",
+    "door": "दरवाज़े",
+}
+
+
+def zone_word(zone: str, lang: Language, oblique: bool = False) -> str:
     if lang == "en":
         return zone
+    if oblique and lang == "hi" and zone in HINDI_OBLIQUE:
+        return HINDI_OBLIQUE[zone]
     return ZONE_WORDS.get(zone, {}).get(lang, zone)
 
 
@@ -89,6 +101,7 @@ def _window_phrase(rule: Rule, lang: Language) -> str:
 def _condition_sentence(rule: Rule, names: str, lang: Language) -> str:
     subj = subject_word(rule.subject, rule.subject_name, lang)
     zone = zone_word(rule.zone_object, lang)
+    zone_obl = zone_word(rule.zone_object, lang, oblique=True)
     dur = spoken_duration(rule.duration_sec, lang)
     c = rule.condition
     if c == Condition.ABSENT_FROM_ZONE:
@@ -101,37 +114,37 @@ def _condition_sentence(rule: Rule, names: str, lang: Language) -> str:
         if rule.duration_sec:
             return {
                 "en": f"If {subj} stays at the {zone} for {dur}, I'll tell {names}.",
-                "hi": f"अगर {subj} {dur} तक {zone} के पास रहें, तो मैं {names} को बताऊँगा।",
+                "hi": f"अगर {subj} {dur} तक {zone_obl} के पास रहें, तो मैं {names} को बताऊँगा।",
                 "kn": f"{subj} {dur} ಕಾಲ {zone} ಬಳಿ ಇದ್ದರೆ, {names}ಗೆ ತಿಳಿಸುತ್ತೇನೆ.",
             }[lang]
         return {
             "en": f"As soon as {subj} is at the {zone}, I'll tell {names}.",
-            "hi": f"जैसे ही {subj} {zone} के पास दिखें, मैं {names} को बताऊँगा।",
+            "hi": f"जैसे ही {subj} {zone_obl} के पास दिखें, मैं {names} को बताऊँगा।",
             "kn": f"{subj} {zone} ಬಳಿ ಕಾಣಿಸಿದ ತಕ್ಷಣ {names}ಗೆ ತಿಳಿಸುತ್ತೇನೆ.",
         }[lang]
     if c == Condition.ON_OBJECT:
         return {
             "en": f"If {subj} gets on the {zone}, I'll tell {names}.",
-            "hi": f"अगर {subj} {zone} पर चढ़े, तो मैं {names} को बताऊँगा।",
+            "hi": f"अगर {subj} {zone_obl} पर चढ़े, तो मैं {names} को बताऊँगा।",
             "kn": f"{subj} {zone} ಮೇಲೆ ಹತ್ತಿದರೆ, {names}ಗೆ ತಿಳಿಸುತ್ತೇನೆ.",
         }[lang]
     # NO_PERSON_NEAR
     if rule.guard is not None and rule.guard.subject == Subject.FLAME:
         return {
             "en": f"If the flame is on and nobody is near the {zone} for {dur}, I'll tell {names}.",
-            "hi": f"अगर {zone} पर आग जल रही हो और {dur} तक उसके पास कोई न हो, तो मैं {names} को बताऊँगा।",
+            "hi": f"अगर {zone_obl} पर आग जल रही हो और {dur} तक उसके पास कोई न हो, तो मैं {names} को बताऊँगा।",
             "kn": f"{zone}ನಲ್ಲಿ ಬೆಂಕಿ ಉರಿಯುತ್ತಿದ್ದು {dur} ಕಾಲ ಹತ್ತಿರ ಯಾರೂ ಇಲ್ಲದಿದ್ದರೆ, {names}ಗೆ ತಿಳಿಸುತ್ತೇನೆ.",
         }[lang]
     if rule.guard is not None:
         g = SUBJECT_WORDS[rule.guard.subject][lang]
         return {
             "en": f"If {g} is there and nobody is near the {zone} for {dur}, I'll tell {names}.",
-            "hi": f"अगर {g} दिखे और {dur} तक {zone} के पास कोई न हो, तो मैं {names} को बताऊँगा।",
+            "hi": f"अगर {g} दिखे और {dur} तक {zone_obl} के पास कोई न हो, तो मैं {names} को बताऊँगा।",
             "kn": f"{g} ಕಾಣಿಸಿ {dur} ಕಾಲ {zone} ಹತ್ತಿರ ಯಾರೂ ಇಲ್ಲದಿದ್ದರೆ, {names}ಗೆ ತಿಳಿಸುತ್ತೇನೆ.",
         }[lang]
     return {
         "en": f"If nobody is near the {zone} for {dur}, I'll tell {names}.",
-        "hi": f"अगर {dur} तक {zone} के पास कोई न हो, तो मैं {names} को बताऊँगा।",
+        "hi": f"अगर {dur} तक {zone_obl} के पास कोई न हो, तो मैं {names} को बताऊँगा।",
         "kn": f"{dur} ಕಾಲ {zone} ಹತ್ತಿರ ಯಾರೂ ಇಲ್ಲದಿದ್ದರೆ, {names}ಗೆ ತಿಳಿಸುತ್ತೇನೆ.",
     }[lang]
 
@@ -139,6 +152,7 @@ def _condition_sentence(rule: Rule, names: str, lang: Language) -> str:
 def restatement(rule: Rule, zone_count: int, names: list[str]) -> str:
     lang = rule.language
     zone = zone_word(rule.zone_object, lang)
+    zone_obl = zone_word(rule.zone_object, lang, oblique=True)
     if zone_count > 1:
         return {
             "en": f"I can see {zone_count} of these ({zone}), numbered in the photo. Which one should I watch?",
@@ -148,7 +162,7 @@ def restatement(rule: Rule, zone_count: int, names: list[str]) -> str:
     window = _window_phrase(rule, lang)
     first = {
         "en": f"I'll watch this {zone}{window}.",
-        "hi": f"मैं {window}इस {zone} पर नज़र रखूँगा।",
+        "hi": f"मैं {window}इस {zone_obl} पर नज़र रखूँगा।",
         "kn": f"ನಾನು {window}ಈ {zone} ಮೇಲೆ ಗಮನ ಇಡುತ್ತೇನೆ.",
     }[lang]
     parts = [first, _condition_sentence(rule, join_names(names, lang), lang)]
@@ -161,6 +175,7 @@ def restatement(rule: Rule, zone_count: int, names: list[str]) -> str:
 def alert(facts: EventFacts) -> str:
     lang = facts.language
     zone = zone_word(facts.zone_object, lang)
+    zone_obl = zone_word(facts.zone_object, lang, oblique=True)
     start = spoken_time(facts.started_at_local, lang)
     dur = spoken_duration(facts.duration_min * 60, lang)
     c = facts.condition
@@ -176,26 +191,26 @@ def alert(facts: EventFacts) -> str:
         subj = SUBJECT_WORDS[facts.subject][lang]
         msg = {
             "en": f"{subj[0].upper() + subj[1:]} was seen at the {zone} at {start}.",
-            "hi": f"{start} बजे {zone} के पास {subj} दिखा।",
+            "hi": f"{start} बजे {zone_obl} के पास {subj} दिखा।",
             "kn": f"{start}ಕ್ಕೆ {zone} ಬಳಿ {subj} ಕಾಣಿಸಿದರು.",
         }[lang]
     elif c == Condition.ON_OBJECT:
         subj = subject_word(facts.subject, facts.subject_name, lang)
         msg = {
             "en": f"⚠️ {subj[0].upper() + subj[1:]} got on the {zone} at {start}.",
-            "hi": f"⚠️ {subj} {start} बजे {zone} पर चढ़ा।",
+            "hi": f"⚠️ {subj} {start} बजे {zone_obl} पर चढ़ा।",
             "kn": f"⚠️ {subj} {start}ಕ್ಕೆ {zone} ಮೇಲೆ ಹತ್ತಿದೆ.",
         }[lang]
     else:
         msg = {
             "en": f"⚠️ Since {start}, nobody has been near the {zone} for {dur}.",
-            "hi": f"⚠️ {start} बजे से {dur} तक {zone} के पास कोई नहीं है।",
+            "hi": f"⚠️ {start} बजे से {dur} तक {zone_obl} के पास कोई नहीं है।",
             "kn": f"⚠️ {start}ರಿಂದ {dur} ಕಾಲ {zone} ಹತ್ತಿರ ಯಾರೂ ಇಲ್ಲ.",
         }[lang]
         if "flame" in facts.what:
             msg = {
                 "en": f"⚠️ The {zone} flame has been on since {start} and nobody has been near it for {dur}.",
-                "hi": f"⚠️ {start} बजे से {zone} पर आग जल रही है और {dur} से उसके पास कोई नहीं है।",
+                "hi": f"⚠️ {start} बजे से {zone_obl} पर आग जल रही है और {dur} से उसके पास कोई नहीं है।",
                 "kn": f"⚠️ {start}ರಿಂದ {zone}ನಲ್ಲಿ ಬೆಂಕಿ ಉರಿಯುತ್ತಿದೆ, {dur}ದಿಂದ ಹತ್ತಿರ ಯಾರೂ ಇಲ್ಲ.",
             }[lang]
     if facts.visibility == "poor":

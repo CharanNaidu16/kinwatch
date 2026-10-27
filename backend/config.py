@@ -52,6 +52,9 @@ class Settings(BaseSettings):
 
     family_members_json: list[FamilyMember] = Field(default_factory=list)
     household_language: Literal["hi", "kn", "en"] = "hi"
+    # What SAM looks for when a rule names a zone, e.g. {"bed": "sofa"} when Papa sleeps on a sofa.
+    # Messages keep the family's word ("bed"); only the camera concept changes.
+    zone_concepts_json: dict[str, str] = Field(default_factory=dict)
 
     device_token: SecretStr = SecretStr("change-me-device")
     bts_token: SecretStr = SecretStr("change-me-bts")
@@ -96,6 +99,11 @@ class Settings(BaseSettings):
     @property
     def effective_claim_timeout_sec(self) -> int:
         return self.demo_claim_timeout_sec if self.demo_mode else self.claim_timeout_sec
+
+    def sam_concept(self, zone_object: str) -> str:
+        """The SAM text prompt for a rule's zone; the rule's own word unless ZONE_CONCEPTS_JSON maps it."""
+        zone = " ".join(zone_object.lower().split())
+        return self.zone_concepts_json.get(zone, zone)
 
 
 @lru_cache

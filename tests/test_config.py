@@ -27,6 +27,15 @@ def test_env_file_tolerates_spaces_around_equals(tmp_path):
     assert s.use_mocks is False
 
 
+def test_zone_concepts_map_the_familys_word_to_what_sam_looks_for(tmp_path):
+    env = tmp_path / ".env"
+    env.write_text('ZONE_CONCEPTS_JSON={"bed":"sofa"}\n', encoding="utf-8")
+    s = Settings(_env_file=env)
+    assert s.sam_concept("Bed") == "sofa"
+    assert s.sam_concept("gas stove") == "gas stove"
+    assert Settings(_env_file=None).sam_concept("bed") == "bed"
+
+
 def test_secrets_never_appear_in_repr():
     s = Settings(_env_file=None, meta_api_key="sk-secret-value", wa_access_token="EAAG-secret")
     assert "sk-secret-value" not in repr(s)
