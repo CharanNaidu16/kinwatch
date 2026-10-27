@@ -68,6 +68,39 @@ _TEXTS: dict[str, dict[Language, str]] = {
         "kn": "ನಮಸ್ಕಾರ! ನಾನು Kinwatch. ನಿಮ್ಮ ಪರಿಚಯ ನನಗೆ ಇನ್ನೂ ಇಲ್ಲ. ನಿಮ್ಮ Telegram ID {address}. "
               "ಕುಟುಂಬದ Kinwatch ಅಡ್ಮಿನ್‌ಗೆ ಇದನ್ನು ಸೇರಿಸಲು ಹೇಳಿ, ನಂತರ ಮತ್ತೆ ಮೆಸೇಜ್ ಮಾಡಿ.",
     },
+    "camera_offline": {
+        "en": "The camera isn't sending pictures right now. Open the camera link on the camera phone, "
+              "then send your message again.",
+        "hi": "कैमरा अभी तस्वीरें नहीं भेज रहा। कैमरा फ़ोन पर कैमरा लिंक खोलें, फिर अपना मैसेज दोबारा भेजें।",
+        "kn": "ಕ್ಯಾಮೆರಾ ಈಗ ಚಿತ್ರಗಳನ್ನು ಕಳುಹಿಸುತ್ತಿಲ್ಲ. ಕ್ಯಾಮೆರಾ ಫೋನ್‌ನಲ್ಲಿ ಕ್ಯಾಮೆರಾ ಲಿಂಕ್ ತೆರೆಯಿರಿ, "
+              "ನಂತರ ನಿಮ್ಮ ಮೆಸೇಜ್ ಮತ್ತೆ ಕಳುಹಿಸಿ.",
+    },
+    "zone_not_found": {
+        "en": "I can't see a {zone} in the camera view. Point the phone at it and send your message again.",
+        "hi": "मुझे कैमरे में {zone} नहीं दिख रहा। फ़ोन को उसकी तरफ़ करें और मैसेज दोबारा भेजें।",
+        "kn": "ಕ್ಯಾಮೆರಾದಲ್ಲಿ {zone} ಕಾಣುತ್ತಿಲ್ಲ. ಫೋನ್ ಅನ್ನು ಅದರ ಕಡೆ ತಿರುಗಿಸಿ ಮೆಸೇಜ್ ಮತ್ತೆ ಕಳುಹಿಸಿ.",
+    },
+    "pick_one": {
+        "en": "Which one should I watch? Reply with its number.",
+        "hi": "किस पर नज़र रखूँ? उसका नंबर लिखें।",
+        "kn": "ಯಾವುದರ ಮೇಲೆ ಗಮನ ಇಡಲಿ? ಅದರ ಸಂಖ್ಯೆ ಕಳುಹಿಸಿ.",
+    },
+    "claim_button": {"en": "I've got it", "hi": "मैं देख लूँगा", "kn": "ನಾನು ನೋಡ್ತೀನಿ"},
+    "claim_thanks": {
+        "en": "Thanks, I've told the others.",
+        "hi": "धन्यवाद, मैंने बाकी लोगों को बता दिया है।",
+        "kn": "ಧನ್ಯವಾದ, ಉಳಿದವರಿಗೆ ತಿಳಿಸಿದ್ದೇನೆ.",
+    },
+    "claimed_notice": {
+        "en": "{name} is handling it ({time}).",
+        "hi": "{name} इसे देख रहे हैं ({time})।",
+        "kn": "{name} ಇದನ್ನು ನೋಡಿಕೊಳ್ಳುತ್ತಿದ್ದಾರೆ ({time}).",
+    },
+    "already_claimed": {
+        "en": "{name} is already handling it.",
+        "hi": "{name} पहले से इसे देख रहे हैं।",
+        "kn": "{name} ಈಗಾಗಲೇ ಇದನ್ನು ನೋಡಿಕೊಳ್ಳುತ್ತಿದ್ದಾರೆ.",
+    },
     "button_yes": {"en": "Yes ✓", "hi": "हाँ ✓", "kn": "ಹೌದು ✓"},
     "button_no": {"en": "No ✗", "hi": "नहीं ✗", "kn": "ಇಲ್ಲ ✗"},
     "clarify_time_window": {

@@ -1,6 +1,8 @@
 """FastAPI app. Run with: uvicorn backend.main:app"""
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import hmac
 import logging
 from collections.abc import AsyncIterator
@@ -10,6 +12,7 @@ from pathlib import Path
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, PlainTextResponse
 
+from backend.alerts import Alerts
 from backend.budget import Budget
 from backend.clock import Clock, SystemClock
 from backend.config import Settings, get_settings
@@ -20,9 +23,11 @@ from backend.models import build_adapters
 from backend.router import Router
 from backend.storage import Storage
 from backend.vision import ChangeDetector, FrameBuffer, FrameError, load_frame
+from backend.watcher import Watcher
 
 PHONE_PAGE = Path(__file__).resolve().parent.parent / "phone" / "index.html"
 DEFAULT_TOKENS = {"change-me-device", "change-me-bts"}
+TICK_SEC = 2.0  # timers advance even when no frames arrive (camera offline still ends a window)
 
 
 def _configure_logging() -> None:
@@ -62,9 +67,29 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None, sto
         app.state.frames = FrameBuffer()
         app.state.changes = ChangeDetector()
         app.state.messenger = build_messenger(settings)
-        app.state.router = Router(storage=db, settings=settings, clock=clock, adapters=app.state.adapters,
-                                  messenger=app.state.messenger, household_id=app.state.household_id)
+        router = Router(storage=db, settings=settings, clock=clock, adapters=app.state.adapters,
+                        messenger=app.state.messenger, household_id=app.state.household_id, frames=app.state.frames)
+        alerts = Alerts(storage=db, settings=settings, clock=clock, adapters=app.state.adapters, send=router.send,
+                        household_id=app.state.household_id)
+        watcher = Watcher(storage=db, settings=settings, clock=clock, adapters=app.state.adapters,
+                          frames=app.state.frames, household_id=app.state.household_id, on_event=alerts.on_event)
+        router.watcher, router.alerts = watcher, alerts
+        app.state.router, app.state.alerts, app.state.watcher = router, alerts, watcher
+        watcher.reload()
+
+        async def ticker() -> None:
+            while True:
+                await asyncio.sleep(TICK_SEC)
+                try:
+                    await watcher.tick(clock.now())
+                except Exception:
+                    logging.getLogger("kinwatch.watcher").exception("tick failed")
+
+        tick_task = asyncio.create_task(ticker())
         yield
+        tick_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await tick_task
         if storage is None:
             db.close()
 
@@ -106,9 +131,10 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None, sto
             except FrameError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
             state.frames.add(frame)
-            changed = state.changes.changed(frame)
-            if changed:  # stand-in until the vision loop (Thu 29 Oct) marks the frames it sends to SAM
+            changed = state.changes.changed(frame)  # for the phone's status only; the watcher keeps its own
+            if changed:
                 state.changes.mark_analysed(frame)
+            await state.watcher.on_frame(frame)  # starts SAM analysis in the background when due
             state.storage.execute("UPDATE devices SET last_seen_at = ?, last_frame_shape = ? WHERE id = ?",
                                   (now, frame.shape, state.device_id))
             armed = state.storage.query_one(

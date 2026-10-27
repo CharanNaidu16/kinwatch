@@ -34,6 +34,13 @@ def test_change_detector_ignores_jpeg_noise_and_sees_a_person():
     assert det.changed(_frame([(BED, (100, 200, 500, 400))], size=(480, 640)))  # phone rotated
 
 
+def test_change_in_colour_at_equal_brightness_is_seen():
+    """A red shirt on a blue sofa is almost the same grey; the detector must still notice."""
+    det = ChangeDetector()
+    det.mark_analysed(_frame([(BED, (100, 200, 500, 400)), (PERSON, (150, 250, 400, 340))]))
+    assert det.changed(_frame([(BED, (100, 200, 500, 400))]))
+
+
 def test_frame_buffer_keeps_the_last_n_and_knows_staleness():
     buf = FrameBuffer(maxlen=3)
     for ts in range(5):

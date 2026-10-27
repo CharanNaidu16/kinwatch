@@ -134,13 +134,15 @@ def _post(client, secret, update):
 
 
 def test_rule_flow_over_telegram(tg_app, storage):
+    from backend.models.mock_sam import PALETTE, synthetic_frame
+
     client, sent, secret = tg_app
+    frame = synthetic_frame([(PALETTE["bed"][0], (300, 250, 620, 420))])
+    client.post("/api/frame", content=frame, headers={"X-Device-Token": "d" * 32})
     assert _post(client, "wrong", _text(body=HINDI_RULE)).status_code == 401
     assert _post(client, secret, _text(body=HINDI_RULE)).json() == {"ok": True, "accepted": 1}
-    method, body = sent[-1]
-    assert method == "sendMessage" and body["text"].startswith("मैं रात 10 बजे से")
+    assert sent[-1][0] == "sendPhoto"  # the confirmation photo with the bed outlined
     rule_id = storage.query_one("SELECT id FROM rules")["id"]
-    assert body["reply_markup"]["inline_keyboard"][0][0]["callback_data"] == f"yes:{rule_id}"
 
     _post(client, secret, _tap(f"yes:{rule_id}"))
     assert ("answerCallbackQuery", {"callback_query_id": "777"}) in sent

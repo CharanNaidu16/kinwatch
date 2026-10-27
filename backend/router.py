@@ -1,9 +1,9 @@
 """Inbound message routing by conversation state (PLAN.md §5.6). No AI classifier: buttons, numbers
 and keywords only; anything else gets the fixed fallback reply.
 
-Rule intake today: text or voice note -> Muse Spark parse -> validation -> restatement with
-[Yes] [No]. The confirmation snapshot (SAM outlines, PLAN.md §3.3) slots in before the restatement
-on Thu 29 Oct.
+Rule intake: text or voice note -> Muse Spark parse -> validation -> SAM outlines the zone on the
+latest camera frame -> photo + restatement from the validated JSON with [Yes] [No] (PLAN.md §3.3).
+Several candidates are numbered; "2" or "no, the other one" picks one. Nothing is armed until yes.
 """
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Literal
 
+from backend import templates
 from backend.budget import BudgetExceeded
 from backend.clock import Clock
 from backend.config import Settings
@@ -24,7 +25,10 @@ from backend.models.mock_spark import detect_language
 from backend.rules import validate_parsed
 from backend.schemas import Language, Member, Rule, RuleStatus
 from backend.storage import Storage
+from backend.snapshot import describe, draw
 from backend.texts import text
+from backend.vision import MIN_CONFIDENCE, FrameBuffer
+from backend.zones import load_candidates, reference_frame, save_candidates
 
 log = logging.getLogger("kinwatch.router")
 
@@ -33,6 +37,8 @@ CLARIFY_TTL_SEC = 10 * 60
 MAX_CLARIFY_ROUNDS = 2
 LANGUAGE_BIAS = ["Hindi", "Kannada", "English"]
 STATUS_ORDER = {"accepted": 0, "sent": 1, "delivered": 2, "read": 3}  # failed is handled apart
+FRESH_FRAME_SEC = 20  # the confirmation photo must be this recent
+MAX_ZONES = 5
 
 YES_WORDS = {"yes", "y", "yeah", "yep", "ok", "okay", "haan", "haa", "han", "ha", "ji", "sahi", "theek", "thik",
              "हाँ", "हां", "हा", "जी", "सही", "ठीक", "ಹೌದು", "howdu", "houdu", "sari", "ಸರಿ"}
@@ -68,7 +74,7 @@ class Conversation:
 
 class Router:
     def __init__(self, *, storage: Storage, settings: Settings, clock: Clock, adapters: Adapters,
-                 messenger: Messenger, household_id: int) -> None:
+                 messenger: Messenger, household_id: int, frames: FrameBuffer | None = None) -> None:
         self.storage = storage
         self.settings = settings
         self.clock = clock
@@ -77,6 +83,9 @@ class Router:
         self.household_id = household_id
         self._locks: dict[int, asyncio.Lock] = {}
         self._introduced: set[str] = set()
+        self.frames = frames
+        self.watcher = None  # set by the app: reloaded when a rule is armed
+        self.alerts = None  # set by the app: handles "I've got it"
 
     async def introduce(self, inbound: Inbound) -> None:
         """Tell an unknown sender their address once, so the admin can add them to FAMILY_MEMBERS_JSON."""
@@ -208,13 +217,7 @@ class Router:
 
     async def _message(self, message: str, kind: Literal["text", "voice"], member: Member, conv: Conversation) -> None:
         if conv.state == "awaiting_confirmation":
-            if is_yes(message):
-                return await self._arm(conv, member)
-            if is_no(message):
-                return await self._decline(conv, member)
-            rule = self.storage.get_rule(conv.rule_id) if conv.rule_id else None
-            lang = rule.language if rule else self.settings.household_language
-            return await self.send(member, "info", text("fallback_reply", lang))
+            return await self._confirmation_reply(message, member, conv)
         if conv.state == "awaiting_clarification":
             combined = f"{conv.data.get('text', '')} {message}".strip()
             return await self._new_rule(combined, conv.data.get("kind", kind), member,
@@ -222,13 +225,33 @@ class Router:
                                         transcript=conv.data.get("transcript") or (message if kind == "voice" else None))
         await self._new_rule(message, kind, member, rounds=0, transcript=message if kind == "voice" else None)
 
+    async def _confirmation_reply(self, message: str, member: Member, conv: Conversation) -> None:
+        rule = self.storage.get_rule(conv.rule_id) if conv.rule_id else None
+        lang = rule.language if rule else self.settings.household_language
+        words = _words(message)
+        n = int(conv.data.get("n", 1))
+        if len(words) == 1 and words[0].isdigit():
+            return await self._select(conv, member, int(words[0]))
+        if is_yes(message):
+            return await self._arm(conv, member)
+        if is_no(message):
+            if len(words) > 1 and n > 1 and rule is not None:  # "no, the other bed"
+                return await self._correct(conv, member, rule, message)
+            return await self._decline(conv, member)
+        await self.send(member, "info", text("fallback_reply", lang))
+
     async def _button(self, payload: str, member: Member, conv: Conversation, lang: Language) -> None:
         action, _, ident = payload.partition(":")
-        if conv.state == "awaiting_confirmation" and ident == str(conv.rule_id):
+        if action == "claim" and ident.isdigit() and self.alerts is not None:
+            return await self.alerts.claim(int(ident), member)
+        rule_part, _, number = ident.partition(":")
+        if conv.state == "awaiting_confirmation" and rule_part == str(conv.rule_id):
             if action == "yes":
                 return await self._arm(conv, member)
             if action == "no":
                 return await self._decline(conv, member)
+            if action == "pick" and number.isdigit():
+                return await self._select(conv, member, int(number))
         await self.send(member, "info", text("fallback_reply", lang))  # stale or unknown button
 
     # --- rules ----------------------------------------------------------------------------------
@@ -256,14 +279,72 @@ class Router:
 
         rule = result.rule
         assert rule is not None
-        names = self._names(rule, members)
-        restatement = await self.adapters.spark.restate(rule, 1, names)
-        rule = rule.model_copy(update={"status": RuleStatus.AWAITING_CONFIRMATION, "restatement": restatement})
+        frame = self.frames.latest(now, FRESH_FRAME_SEC) if self.frames is not None else None
+        if frame is None:
+            self.reset(member.id)
+            return await self.send(member, "info", text("camera_offline", rule.language))
+        concept = self.settings.sam_concept(rule.zone_object)
+        found = await self.adapters.segmenter.segment(frame.jpeg, concept, purpose="segment_zone")
+        found = [i for i in found if i.confidence is None or i.confidence >= MIN_CONFIDENCE][:MAX_ZONES]
+        if not found:
+            self.reset(member.id)
+            return await self.send(member, "info", text("zone_not_found", rule.language,
+                                                        zone=templates.zone_word(rule.zone_object, rule.language)))
+        found.sort(key=lambda i: i.box.x1)  # number them left to right
+        rule = rule.model_copy(update={"status": RuleStatus.AWAITING_CONFIRMATION})
         rule_id = self.storage.insert_rule(rule, now)
-        self.save(Conversation(member.id, "awaiting_confirmation", rule_id, now + CONFIRM_TTL_SEC))
-        buttons = [Button(f"yes:{rule_id}", text("button_yes", rule.language)),
-                   Button(f"no:{rule_id}", text("button_no", rule.language))]
-        await self.send(member, "confirm", restatement, buttons)
+        rule = rule.model_copy(update={"id": rule_id})
+        save_candidates(self.settings.data_path, rule_id, frame.jpeg, [i.mask for i in found])
+        self.save(Conversation(member.id, "awaiting_confirmation", rule_id, now + CONFIRM_TTL_SEC,
+                               {"n": len(found), "selected": 1 if len(found) == 1 else None}))
+        if len(found) == 1:
+            return await self._send_confirmation(member, rule, 1)
+        names = self._names(rule, members)
+        question = await self.adapters.spark.restate(rule, len(found), names)
+        image = await asyncio.to_thread(draw, frame.jpeg, [i.mask for i in found], numbered=True)
+        buttons = [Button(f"pick:{rule_id}:{k}", str(k)) for k in range(1, min(len(found), 3) + 1)]
+        await self.send(member, "confirm", question, buttons, jpeg=image)
+
+    async def _send_confirmation(self, member: Member, rule: Rule, selected: int) -> None:
+        """Photo with the chosen zone outlined + restatement from the validated JSON + [Yes] [No]."""
+        masks = load_candidates(self.settings.data_path, rule.id)
+        frame = reference_frame(self.settings.data_path, rule.id)
+        names = self._names(rule, self.storage.members(self.household_id))
+        restatement = await self.adapters.spark.restate(rule, 1, names)
+        self.storage.execute("UPDATE rules SET restatement = ?, zone_instance = ? WHERE id = ?",
+                             (restatement, selected, rule.id))
+        buttons = [Button(f"yes:{rule.id}", text("button_yes", rule.language)),
+                   Button(f"no:{rule.id}", text("button_no", rule.language))]
+        image = None
+        if frame is not None and 0 < selected <= len(masks):
+            image = await asyncio.to_thread(draw, frame, [masks[selected - 1]], numbered=False)
+        await self.send(member, "confirm", restatement, buttons, jpeg=image)
+
+    async def _select(self, conv: Conversation, member: Member, number: int) -> None:
+        rule = self.storage.get_rule(conv.rule_id) if conv.rule_id else None
+        if rule is None:
+            self.reset(member.id)
+            return await self.send(member, "info", text("not_set", self.settings.household_language))
+        if not 1 <= number <= int(conv.data.get("n", 1)):
+            return await self.send(member, "info", text("pick_one", rule.language))
+        conv.data["selected"] = number
+        self.save(conv)
+        await self._send_confirmation(member, rule, number)
+
+    async def _correct(self, conv: Conversation, member: Member, rule: Rule, reply: str) -> None:
+        masks = load_candidates(self.settings.data_path, rule.id)
+        frame = reference_frame(self.settings.data_path, rule.id) or b""
+        numbered = await asyncio.to_thread(draw, frame, masks, numbered=True) if frame and masks else frame
+        width = masks[0].shape[1] if masks else 1
+        fix = await self.adapters.spark.resolve_correction(numbered, describe(masks, width), reply,
+                                                           conv.data.get("selected"))
+        if fix.action == "select_instance" and fix.instance:
+            return await self._select(conv, member, fix.instance)
+        if fix.action == "reparse" and fix.new_text:
+            self.storage.execute("UPDATE rules SET status = 'deleted' WHERE id = ?", (rule.id,))
+            self.reset(member.id)
+            return await self._new_rule(fix.new_text, rule.input_kind, member, rounds=0, transcript=None)
+        await self._decline(conv, member)
 
     @staticmethod
     def _names(rule: Rule, members: list[Member]) -> list[str]:
@@ -276,10 +357,16 @@ class Router:
         if rule is None:
             self.reset(member.id)
             return await self.send(member, "info", text("not_set", self.settings.household_language))
-        self.storage.execute("UPDATE rules SET status = 'armed', armed_at = ? WHERE id = ?", (now, rule.id))
+        selected = conv.data.get("selected")
+        if selected is None:
+            return await self.send(member, "info", text("pick_one", rule.language))
+        self.storage.execute("UPDATE rules SET status = 'armed', armed_at = ?, zone_instance = ? WHERE id = ?",
+                             (now, selected, rule.id))
         self.storage.add_timeline(self.household_id, now, "rule_armed", f"Rule {rule.id} armed by {member.name}",
-                                  rule_id=rule.id, data={"rule": rule.rule_json()})
+                                  rule_id=rule.id, data={"rule": rule.rule_json(), "zone_instance": selected})
         self.reset(member.id)
+        if self.watcher is not None:
+            self.watcher.reload()
         await self.send(member, "info", text("armed", rule.language))
 
     async def _decline(self, conv: Conversation, member: Member) -> None:

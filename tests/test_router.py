@@ -8,8 +8,12 @@ from fastapi.testclient import TestClient
 
 from backend.config import FamilyMember
 from backend.main import create_app
+from backend.models.mock_sam import PALETTE, synthetic_frame
 from backend.router import is_no, is_yes
 from tests import wa
+
+BED1, BED2, PERSON = PALETTE["bed"][0], PALETTE["bed"][1], PALETTE["person"][0]
+ONE_BED = [(BED1, (300, 250, 620, 420)), (PERSON, (340, 230, 560, 330))]
 
 PRIYA, RAHUL, STRANGER = "910000000001", "910000000002", "919999999999"
 HINDI_RULE = "पापा अगर रात को उठें और दस मिनट में वापस न आएँ तो मुझे और राहुल को बताना"
@@ -38,6 +42,12 @@ def post(client, *messages, statuses=None):
     return r.json()
 
 
+def camera(client, objects=ONE_BED):
+    token = client.app.state.settings.device_token.get_secret_value()
+    r = client.post("/api/frame", content=synthetic_frame(objects), headers={"X-Device-Token": token})
+    assert r.status_code == 200
+
+
 def outbox(client, address=PRIYA):
     member = client.app.state.storage.member_by_address("mock", address)
     return client.app.state.messenger.to(member.id)
@@ -54,8 +64,10 @@ def test_no_words(word):
 
 
 def test_hindi_rule_is_restated_with_buttons_then_armed(client, storage):
+    camera(client)
     assert post(client, wa.text(PRIYA, HINDI_RULE, "m1")) == {"ok": True, "accepted": 1}
     [confirm] = outbox(client)
+    assert confirm.kind == "image" and confirm.jpeg.startswith(bytes([0xFF, 0xD8]))  # photo with the bed outlined
     assert confirm.text.startswith("मैं रात 10 बजे से सुबह 6 बजे तक इस बिस्तर पर नज़र रखूँगा।")
     assert "Priya और Rahul" in confirm.text
     rule_id = storage.query_one("SELECT id, status FROM rules")["id"]
@@ -70,6 +82,7 @@ def test_hindi_rule_is_restated_with_buttons_then_armed(client, storage):
 
 
 def test_typed_no_declines(client, storage):
+    camera(client)
     post(client, wa.text(PRIYA, HINDI_RULE, "m1"))
     post(client, wa.text(PRIYA, "nahi", "m2"))
     assert storage.query_one("SELECT status FROM rules")["status"] == "deleted"
@@ -77,6 +90,7 @@ def test_typed_no_declines(client, storage):
 
 
 def test_unrecognised_reply_gets_the_fallback(client):
+    camera(client)
     post(client, wa.text(PRIYA, HINDI_RULE, "m1"))
     post(client, wa.text(PRIYA, "kal subah dekhte hain", "m2"))
     assert outbox(client)[-1].text == "माफ़ कीजिए, कृपया बटन दबाएँ या हाँ/नहीं लिखें।"
@@ -95,6 +109,7 @@ def test_health_request_is_refused(client, storage):
 
 
 def test_clarification_round_then_rule(client, storage):
+    camera(client)
     post(client, wa.text(PRIYA, "keep an eye on things", "m1"))
     assert "What should I watch" in outbox(client)[-1].text
     post(client, wa.text(PRIYA, "tell me if Papa gets up from bed at night", "m2"))
@@ -103,6 +118,7 @@ def test_clarification_round_then_rule(client, storage):
 
 
 def test_strangers_and_duplicates_are_ignored(client, storage):
+    camera(client)
     assert post(client, wa.text(STRANGER, HINDI_RULE, "m1"))["accepted"] == 0
     assert client.app.state.messenger.outbox == []
     assert post(client, wa.text(PRIYA, HINDI_RULE, "m2"))["accepted"] == 1
@@ -119,6 +135,7 @@ def _opus(seconds=1.0) -> bytes:
 
 
 def test_voice_note_is_echoed_then_parsed(client, storage):
+    camera(client)
     client.app.state.messenger.media["media1"] = (_opus(), "audio/ogg")
     post(client, wa.voice(PRIYA, "media1", "m1"))
     heard, confirm = outbox(client)
@@ -135,3 +152,43 @@ def test_unreadable_voice_note_gets_a_polite_reply(client):
 
 def test_dev_inbound_needs_the_bts_token(client):
     assert client.post("/dev/inbound", content=json.dumps(wa.envelope([wa.text(PRIYA, "hi")]))).status_code == 401
+
+
+def test_no_camera_means_no_rule(client, storage):
+    post(client, wa.text(PRIYA, HINDI_RULE, "m1"))
+    assert outbox(client)[-1].text.startswith("कैमरा अभी तस्वीरें नहीं भेज रहा")
+    assert storage.query_one("SELECT COUNT(*) AS n FROM rules")["n"] == 0
+
+
+def test_zone_not_in_view(client, storage):
+    camera(client, [(PERSON, (100, 100, 200, 300))])  # no bed anywhere
+    post(client, wa.text(PRIYA, HINDI_RULE, "m1"))
+    assert outbox(client)[-1].text == "मुझे कैमरे में बिस्तर नहीं दिख रहा। फ़ोन को उसकी तरफ़ करें और मैसेज दोबारा भेजें।"
+
+
+def test_two_beds_are_numbered_and_a_number_picks_one(client, storage):
+    camera(client, [(BED1, (20, 250, 300, 420)), (BED2, (340, 250, 620, 420))])
+    post(client, wa.text(PRIYA, HINDI_RULE, "m1"))
+    ask = outbox(client)[-1]
+    assert ask.kind == "image" and ask.text.startswith("फ़ोटो में 2 बिस्तर दिख रहे हैं")
+    rule_id = storage.query_one("SELECT id FROM rules")["id"]
+    assert [b.id for b in ask.buttons] == [f"pick:{rule_id}:1", f"pick:{rule_id}:2"]
+
+    post(client, wa.text(PRIYA, "haan", "m2"))  # yes before choosing: asks which one
+    assert outbox(client)[-1].text == "किस पर नज़र रखूँ? उसका नंबर लिखें।"
+    post(client, wa.text(PRIYA, "2", "m3"))
+    confirm = outbox(client)[-1]
+    assert confirm.kind == "image" and confirm.text.startswith("मैं रात 10 बजे") and confirm.buttons[0].id == f"yes:{rule_id}"
+    post(client, wa.button(PRIYA, f"yes:{rule_id}", msg_id="m4"))
+    row = storage.query_one("SELECT status, zone_instance FROM rules")
+    assert (row["status"], row["zone_instance"]) == ("armed", 2)
+    assert client.app.state.watcher.runtimes[rule_id].zone.box[0] >= 330  # the right-hand bed
+
+
+def test_no_the_other_one_switches_bed(client, storage):
+    camera(client, [(BED1, (20, 250, 300, 420)), (BED2, (340, 250, 620, 420))])
+    post(client, wa.text(PRIYA, HINDI_RULE, "m1"))
+    rule_id = storage.query_one("SELECT id FROM rules")["id"]
+    post(client, wa.button(PRIYA, f"pick:{rule_id}:1", msg_id="m2"))
+    post(client, wa.text(PRIYA, "नहीं, दूसरा वाला", "m3"))  # mock Spark: "the other one"
+    assert storage.query_one("SELECT zone_instance FROM rules")["zone_instance"] == 2
