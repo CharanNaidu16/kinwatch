@@ -20,7 +20,7 @@ Kinwatch is a solo entry for the Meta Global AI Developer Hackathon (Indie track
 | Family phones | 2+ other people's phones: yes. **A = `<NAME 1>`** (sends the rule), **B = `<NAME 2>`**. **Escalation order: A, then B.** Message examples below use "Priya" (A) and "Rahul" (B) as sample names; seed data and fixtures use the real names, which live only in `.env`, never in the repo |
 | Scope cuts (27 Oct review) | No GitHub Pages static export; no replay recomputation test; no AI reply classifier; no 60 s re-check in event verification |
 | Fixtures rule | Fixtures committed to the repo are recorded **from Tue 27 Oct onward**. Step 0 outputs stay in `scratch/` only |
-| Messaging (27 Oct) | **WhatsApp is the primary and demo channel**: the test number works (inbound confirmed 27 Oct 11:14 AM IST; outbound API returns 200, delivery being checked, §6.1). Telegram is **not built** unless WhatsApp breaks; the `Messenger` interface stays so a second channel can be added later |
+| Messaging (27 Oct, updated afternoon) | **Telegram is the working channel for now; WhatsApp is built and blocked by Meta.** Once our app was subscribed to the WABA, status webhooks showed every outbound message failing with **131031 "Business Account locked"**. The health-status API gave the reasons: payment method error (141006), business profile incomplete (131000), business not verified (141010); WhatsApp Manager says "verify your business in Security Centre" before any messaging. Verification can take days, so the Telegram adapter (§6.2) was built the same day and the full voice-note → rule → confirm → armed flow works on Telegram. If verification clears before filming, `MESSENGER=whatsapp` switches back; the video shows whichever channel works live (§8 Plan B) |
 | Phone numbers | Live **only in `.env` and the SQLite database**, never in the repo, fixtures, logs or screenshots committed to git. Fixtures use placeholders like `<A_WA_ID>` |
 | Camera device | No spare old phone. Dev: laptop webcam in Chrome. Filming: your own Android phone as the camera (or borrow an old phone from a relative if one turns up) |
 | Papa | You play Papa yourself. The video says it is a re-enactment |
@@ -666,7 +666,7 @@ Anything else gets the fallback reply in the member's language:
 
 ### 6.2 Second channel (not built)
 
-The `Messenger` protocol (§3.7) keeps the core channel-agnostic. A Telegram adapter (Bot API webhook with a secret-token header, `getFile` for voice notes, inline-keyboard buttons) is about half a day of work and is built **only if WhatsApp breaks** (for example the account is restricted or delivery fails and can't be fixed). It is not in the schedule.
+The `Messenger` protocol (§3.7) keeps the core channel-agnostic. A Telegram adapter (Bot API webhook with a secret-token header, `getFile` for voice notes, inline-keyboard buttons) is about half a day of work and is built **only if WhatsApp breaks** (for example the account is restricted or delivery fails and can't be fixed). **Built 27 Oct** after WhatsApp returned 131031: `backend/messaging/telegram.py`, secret-token webhook, inline buttons, voice notes via getFile. Unknown users are told their Telegram ID once so the admin can add it to `FAMILY_MEMBERS_JSON`.
 
 ### 6.3 Message catalogue (Hindi household example)
 
@@ -1085,7 +1085,7 @@ If the check-in works, swap 0:30–0:42 for a 12 s check-in moment at 1:30 ("प
 5. ~~Telegram DMs or group~~ No longer applies: WhatsApp is the channel (27 Oct).
 7. **Answered 27 Oct:** WhatsApp alerts go to **you and your family members**; their numbers are added later via `FAMILY_MEMBERS_JSON` in `.env` (list order = escalation order).
 
-**WhatsApp delivery is parked (27 Oct, your call).** Two plain-text sends returned HTTP 200 with a `wamid`, but delivery is unconfirmed because our app isn't subscribed to the WABA yet (§6.1). Resume with the status webhook on Wed 28 Oct.
+**WhatsApp delivery, resolved 27 Oct:** the status webhook works and shows error 131031 (business account locked pending business verification, see the decisions table). Business verification started by you in Security Centre; Telegram carries the demo until then.
 6. **Still open:** camera phone for filming: your own phone, or one borrowed from a relative?
 
 (Your 27 Oct message was cut off after answer 2; answers 3, 5 and 6 haven't arrived.)
