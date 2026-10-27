@@ -60,6 +60,14 @@ _TEXTS: dict[str, dict[Language, str]] = {
         "hi": "माफ़ कीजिए, मेरी तरफ़ से कुछ गड़बड़ हो गई। एक मिनट बाद फिर कोशिश करें।",
         "kn": "ಕ್ಷಮಿಸಿ, ನನ್ನ ಕಡೆಯಿಂದ ಏನೋ ತಪ್ಪಾಗಿದೆ. ಒಂದು ನಿಮಿಷದ ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
     },
+    "introduce": {
+        "en": "Hi! I'm Kinwatch. I don't know you yet. Your Telegram ID is {address}. "
+              "Ask your family's Kinwatch admin to add it, then message me again.",
+        "hi": "नमस्ते! मैं Kinwatch हूँ। मैं आपको अभी नहीं जानता। आपकी Telegram ID {address} है। "
+              "परिवार के Kinwatch एडमिन से इसे जुड़वाएँ, फिर मुझे दोबारा मैसेज करें।",
+        "kn": "ನಮಸ್ಕಾರ! ನಾನು Kinwatch. ನಿಮ್ಮ ಪರಿಚಯ ನನಗೆ ಇನ್ನೂ ಇಲ್ಲ. ನಿಮ್ಮ Telegram ID {address}. "
+              "ಕುಟುಂಬದ Kinwatch ಅಡ್ಮಿನ್‌ಗೆ ಇದನ್ನು ಸೇರಿಸಲು ಹೇಳಿ, ನಂತರ ಮತ್ತೆ ಮೆಸೇಜ್ ಮಾಡಿ.",
+    },
     "button_yes": {"en": "Yes ✓", "hi": "हाँ ✓", "kn": "ಹೌದು ✓"},
     "button_no": {"en": "No ✗", "hi": "नहीं ✗", "kn": "ಇಲ್ಲ ✗"},
     "clarify_time_window": {

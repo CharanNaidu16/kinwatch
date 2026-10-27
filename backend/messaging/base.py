@@ -25,7 +25,7 @@ class SentRef:
 @dataclass(frozen=True)
 class Inbound:
     provider_msg_id: str
-    channel: Literal["whatsapp", "mock"]
+    channel: Literal["whatsapp", "telegram", "mock"]
     sender_address: str
     kind: Literal["text", "voice", "button", "other"]
     ts: float
@@ -59,7 +59,7 @@ class SendError(Exception):
 
 
 class Messenger(Protocol):
-    channel: Literal["whatsapp", "mock"]
+    channel: Literal["whatsapp", "telegram", "mock"]
 
     async def send_text(self, to: Member, text: str, buttons: list[Button] | None = None) -> SentRef: ...
 

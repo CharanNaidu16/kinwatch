@@ -7,8 +7,9 @@ Each run gets a new https://<random>.trycloudflare.com URL, so this script:
   1. generates DEVICE_TOKEN / BTS_TOKEN in .env if they are still the defaults,
   2. starts uvicorn and cloudflared and waits until the public URL answers,
   3. with WhatsApp: checks the access token, points the app's webhook at the new URL (needs WA_APP_ID),
-     and subscribes the app to the WhatsApp Business Account so status events arrive,
-  4. prints the camera link and sends it to the admin member on WhatsApp.
+     and subscribes the app to the WhatsApp Business Account so status events arrive;
+     with Telegram: registers the bot's webhook (with its secret token),
+  4. prints the camera link and sends it to the admin member in the chat app.
 Ctrl+C stops everything. Secrets are never printed, except the camera link, which you need.
 """
 from __future__ import annotations
@@ -112,6 +113,24 @@ async def whatsapp_setup(settings: Settings, public_url: str, http: httpx.AsyncC
     return out
 
 
+async def telegram_setup(settings: Settings, public_url: str, http: httpx.AsyncClient) -> list[str]:
+    from backend.messaging.telegram import webhook_secret
+
+    token = settings.telegram_bot_token.get_secret_value() if settings.telegram_bot_token else ""
+    api = f"https://api.telegram.org/bot{token}"
+    me = (await http.get(f"{api}/getMe")).json()
+    if not me.get("ok"):
+        raise RuntimeError(f"Telegram token check failed: {me.get('description')}")
+    r = (await http.post(f"{api}/setWebhook", json={
+        "url": f"{public_url}/webhooks/telegram", "secret_token": webhook_secret(settings),
+        "allowed_updates": ["message", "callback_query"], "drop_pending_updates": True})).json()
+    if not r.get("ok"):
+        raise RuntimeError(f"Telegram setWebhook failed: {r.get('description')}")
+    username = me["result"]["username"]
+    return [f"Telegram bot OK: @{username}  (open https://t.me/{username} and send it a message)",
+            f"Webhook set to {public_url}/webhooks/telegram"]
+
+
 def _pump(stream, sink: list[str], found: threading.Event, prefix: str) -> None:
     for raw in iter(stream.readline, b""):
         line = raw.decode(errors="replace").rstrip()
@@ -136,20 +155,24 @@ def _wait_http(url: str, timeout: float) -> bool:
 
 async def _send_camera_link(settings: Settings, link: str) -> str:
     from backend.household import ensure_household
-    from backend.messaging.whatsapp import WhatsAppMessenger
+    from backend.messaging import build_messenger
     from backend.storage import Storage
 
     storage = Storage(settings.db_path)
     try:
         storage.migrate()
-        admins = [m for m in storage.members(ensure_household(storage, settings)) if m.is_admin]
+        admins = [m for m in storage.members(ensure_household(storage, settings))
+                  if m.is_admin and m.channel == settings.messenger]
         if not admins:
-            return "No admin in FAMILY_MEMBERS_JSON, so the camera link wasn't sent on WhatsApp."
-        await WhatsAppMessenger(settings).send_text(
+            return f"No {settings.messenger} admin in FAMILY_MEMBERS_JSON, so the camera link wasn't sent."
+        ref = await build_messenger(settings).send_text(
             admins[0], f"Kinwatch camera link (open it on the camera phone):\n{link}")
-        return f"Camera link sent to {admins[0].name} on WhatsApp."
-    except Exception as exc:  # e.g. outside the 24-hour window
-        return f"Couldn't send the camera link on WhatsApp ({exc}). Open it from this terminal instead."
+        # Recorded like any other message, so its delivery status shows up in the app's log.
+        storage.execute("INSERT INTO deliveries (member_id, kind, provider_msg_id, sent_at) VALUES (?, 'info', ?, ?)",
+                        (admins[0].id, ref.provider_msg_id, time.time()))
+        return f"Camera link sent to {admins[0].name} on {settings.messenger}."
+    except Exception as exc:  # e.g. outside WhatsApp's 24-hour window
+        return f"Couldn't send the camera link ({exc}). Open it from this terminal instead."
     finally:
         storage.close()
 
@@ -169,8 +192,10 @@ def main() -> None:
     if cloudflared is None:
         sys.exit("cloudflared not found. Install it with:  winget install Cloudflare.cloudflared")
 
+    # No access log: request URLs carry tokens (camera link, webhook verification).
     app = subprocess.Popen([sys.executable, "-m", "uvicorn", "backend.main:app", "--host", "127.0.0.1",
-                            "--port", str(args.port)], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                            "--port", str(args.port), "--no-access-log"],
+                           cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     threading.Thread(target=_pump, args=(app.stdout, [], threading.Event(), "app"), daemon=True).start()
     procs = [app]
     try:
@@ -190,10 +215,11 @@ def main() -> None:
             sys.exit("The tunnel URL isn't reachable yet; try running the script again.")
 
         camera = f"{public}/phone?d={settings.device_token.get_secret_value()}"
-        if settings.messenger == "whatsapp":
+        if settings.messenger in ("whatsapp", "telegram"):
             async def setup() -> list[str]:
+                configure = whatsapp_setup if settings.messenger == "whatsapp" else telegram_setup
                 async with httpx.AsyncClient(timeout=20) as http:
-                    lines = await whatsapp_setup(settings, public, http)
+                    lines = await configure(settings, public, http)
                 return [*lines, await _send_camera_link(settings, camera)]
             for line in asyncio.run(setup()):
                 print(line)

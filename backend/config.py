@@ -19,7 +19,7 @@ class FamilyMember(BaseModel):
 
     name: str
     address: str  # WhatsApp wa_id (digits with country code); stays in .env and the database only
-    channel: Literal["whatsapp", "mock"] = "whatsapp"
+    channel: Literal["whatsapp", "telegram", "mock"] = "whatsapp"
     aliases: list[str] = Field(default_factory=list)
     is_admin: bool = False
 
@@ -43,7 +43,8 @@ class Settings(BaseSettings):
     asr_model: str = "muse-voice-transcribe-1.0"
     record_fixtures: bool = False  # save real responses under fixtures/recorded/ (names scrubbed)
 
-    messenger: Literal["mock", "whatsapp"] = "mock"
+    messenger: Literal["mock", "whatsapp", "telegram"] = "mock"
+    telegram_bot_token: SecretStr | None = None
     wa_graph_version: str = "v25.0"
     wa_app_id: str | None = None  # lets scripts/dev_up.py update the webhook URL on each run
     wa_phone_number_id: str | None = None

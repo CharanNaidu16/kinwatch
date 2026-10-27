@@ -76,6 +76,20 @@ class Router:
         self.messenger = messenger
         self.household_id = household_id
         self._locks: dict[int, asyncio.Lock] = {}
+        self._introduced: set[str] = set()
+
+    async def introduce(self, inbound: Inbound) -> None:
+        """Tell an unknown sender their address once, so the admin can add them to FAMILY_MEMBERS_JSON."""
+        if inbound.sender_address in self._introduced:
+            return
+        self._introduced.add(inbound.sender_address)
+        stranger = Member(id=0, household_id=self.household_id, name="(unknown)", channel=inbound.channel,
+                          address=inbound.sender_address)
+        lang = self._language(inbound.text)
+        try:
+            await self.messenger.send_text(stranger, text("introduce", lang, address=inbound.sender_address))
+        except Exception as exc:  # not a household member: no delivery row, just a log line
+            log.warning("couldn't introduce an unknown sender: %s", exc)
 
     # --- conversation state ---------------------------------------------------------------------
 
@@ -124,6 +138,8 @@ class Router:
         """Record sent/delivered/read/failed from a status webhook on the matching delivery row."""
         row = self.storage.query_one("SELECT id, member_id, status FROM deliveries WHERE provider_msg_id = ?",
                                      (update.provider_msg_id,))
+        detail = f" (error {update.error_code}: {update.error_title})" if update.status == "failed" else ""
+        log.info("WhatsApp status %s for message ...%s%s", update.status, update.provider_msg_id[-8:], detail)
         if row is None:
             return
         if update.status == "failed":

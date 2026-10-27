@@ -138,7 +138,7 @@ class Member(BaseModel):
     id: int
     household_id: int
     name: str
-    channel: Literal["whatsapp", "mock"] = "whatsapp"
+    channel: Literal["whatsapp", "telegram", "mock"] = "whatsapp"
     address: str  # never logged or committed
     aliases: list[str] = Field(default_factory=list)
     escalation_order: int = 0

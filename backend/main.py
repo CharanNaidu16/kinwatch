@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hmac
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -24,6 +25,16 @@ PHONE_PAGE = Path(__file__).resolve().parent.parent / "phone" / "index.html"
 DEFAULT_TOKENS = {"change-me-device", "change-me-bts"}
 
 
+def _configure_logging() -> None:
+    """Kinwatch's own log lines (statuses, failures) at INFO; uvicorn configures only its own loggers."""
+    log = logging.getLogger("kinwatch")
+    if not log.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s", "%H:%M:%S"))
+        log.addHandler(handler)
+        log.setLevel(logging.INFO)
+
+
 def _token_ok(given: str, expected: str) -> bool:
     return hmac.compare_digest(given.encode(), expected.encode())
 
@@ -31,6 +42,7 @@ def _token_ok(given: str, expected: str) -> bool:
 def create_app(settings: Settings | None = None, clock: Clock | None = None, storage: Storage | None = None) -> FastAPI:
     settings = settings or get_settings()
     clock = clock or SystemClock()
+    _configure_logging()
     if not settings.use_mocks and settings.mode == "live" and {
             settings.device_token.get_secret_value(), settings.bts_token.get_secret_value()} & DEFAULT_TOKENS:
         # The live app is reachable through a public tunnel; guessable tokens would expose the camera.
@@ -141,6 +153,24 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None, sto
                 raise HTTPException(status_code=401, detail=str(exc)) from exc
             for update in statuses:
                 state.router.apply_status(update)
+            return {"ok": True, "accepted": accept_inbound(request, inbound, background)}
+
+    if settings.mode == "live" and settings.messenger == "telegram":
+        @app.post("/webhooks/telegram", include_in_schema=False)
+        async def telegram_webhook(request: Request, background: BackgroundTasks) -> dict:
+            from backend.messaging.telegram import callback_query_id
+
+            state = request.app.state
+            try:
+                inbound, _ = state.messenger.verify_and_parse(request.headers, await request.body())
+            except WebhookRejected as exc:
+                raise HTTPException(status_code=401, detail=str(exc)) from exc
+            for msg in inbound:
+                if cq := callback_query_id(msg):
+                    background.add_task(state.messenger.acknowledge, cq)
+                if state.storage.member_by_address(msg.channel, msg.sender_address) is None and msg.kind == "text":
+                    # Telegram ids aren't something people know; tell a new user theirs so the admin can add it.
+                    background.add_task(state.router.introduce, msg)
             return {"ok": True, "accepted": accept_inbound(request, inbound, background)}
 
     if settings.mode == "live" and settings.messenger == "mock":
