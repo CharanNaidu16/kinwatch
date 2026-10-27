@@ -26,7 +26,7 @@ Kinwatch is a solo entry for the Meta Global AI Developer Hackathon (Indie track
 | Papa | You play Papa yourself. The video says it is a re-enactment |
 | Hosting | **No paid hosting.** Development and demo filming run on your laptop with **Cloudflare Tunnel**. The judges' live link is a **replay-only build** (no live API calls) on a free Python host that may sleep and take a moment to wake. The README keeps full local run instructions. See §12 |
 
-**Test calls:** 2 of 10 done (§7.4): auth, model list, and Muse Spark structured output in Hindi all work. Calls 3–9 need your photos and voice note (§7.3). §7.1 comes from Meta's official docs, which I read on 26 Oct.
+**Test calls:** all 10 used (§7.4, 26–27 Oct). Auth, Spark structured output in Hindi, Spark multi-image vision, SAM on person / sofa / flame / dim light / door, and Voice Transcribe all work. Four design changes came out of them (§7.4). §7.1 comes from Meta's official docs, which I read on 26 Oct.
 
 **`.env`:** the folder was empty when I first looked; you've since opened `kinwatch\.env`. I will never read or print it; the scripts only check that `META_API_KEY` is set.
 
@@ -241,8 +241,10 @@ kinwatch/
   - Never if no armed rule is in its time window. That is the biggest saving: nothing runs outside 22:00–06:00 for the Papa rule.
 - **Zone masks:** cached from the confirmation step. Refreshed with one SAM call when (a) the camera moved (whole-frame structural diff against the reference frame > threshold while no subject is detected), (b) every 20 min while armed, or (c) frame shape changed.
 - **Mask to state (geometry in NumPy):**
-  - `overlap(S, Z) = |S ∩ dilate(Z, 8px)| / |S|`.
-  - **in zone:** overlap ≥ 0.30. **on object:** overlap ≥ 0.5 **and** the bottom 25% rows of S's box fall inside Z's dilated mask.
+  - **Zone masks are column-filled first:** for each column, fill from the mask's top pixel to its bottom pixel. SAM leaves out the parts of the zone hidden behind the person lying on it (test calls 4–5: the raw sofa mask overlaps the lying person 0.00, and dilated by 8 px only 0.16), so without this a person in bed would read as "not in bed." Column-filled: 1.00.
+  - `overlap(S, Z) = |S ∩ dilate(colfill(Z), 8px)| / |S|`.
+  - **in zone:** overlap ≥ 0.30. **on object:** overlap ≥ 0.5 **and** the bottom 25% rows of S's box fall inside Z's filled, dilated mask.
+  - **Doors:** SAM's "main door" is the door leaf, not the doorway (test call 8: the open door panel was outlined and the person standing in the doorway was beside it). For a door zone, PRESENT_IN_ZONE uses the **near** test below instead of overlap.
   - **near (NO_PERSON_NEAR):** any person box intersects Z's box expanded by 0.75 × Z width; in a kitchen-framed shot this effectively means "anyone in view."
   - **Counts:** number of S instances in zone. That handles two people: `ABSENT_FROM_ZONE` triggers when the count in zone drops **below the baseline count** seen in the window (Mummy stays, Papa leaves: count goes 2 → 1, which still triggers). The restatement says honestly "I can't tell people apart; I watch how many people are in the bed."
   - **Guard** (e.g. flame present on stove): evaluated from its own SAM subject call.
@@ -290,10 +292,8 @@ stateDiagram-v2
 ### 3.6 Event check and message (`alerts.py`)
 
 1. **Evidence:** 3 frames from the ring buffer plus pending-start snapshots: (a) the frame at `since` (kept when PENDING began), (b) the midpoint, (c) now. The clip is the last ~20 buffered frames, run through ffmpeg as H.264 `yuv420p` MP4 at 4 fps (≈5 s), stored under `data/events/<id>/`.
-2. **Verification (once):** Muse Spark `confirm_event` with 3 images + factual claim text, structured output `{consistent: bool, visible_summary: str, confidence: low|medium|high}`. **One call, no re-check; then send.**
-   - consistent, or not consistent with low or medium confidence: send.
-   - not consistent + high confidence: the only case that suppresses. It is logged as `suppressed` and visible on the behind-the-scenes page, so a wrong suppression is easy to see.
-   - error, timeout or budget refusal: **send anyway (fail toward telling the family)** with no claim of verification.
+2. **Verification (once, advisory only):** Muse Spark `confirm_event` with 3 images + per-frame claims, structured output `{consistent: bool, visible_summary: str, confidence: low|medium|high}`. **One call, no re-check. It never suppresses an alert** (changed 27 Oct after test call 3, where Spark described the frames correctly but answered `consistent: false` with high confidence because the claim's wording overlapped at the boundary time). The verdict and `visible_summary` are stored on the event and shown on the behind-the-scenes page; an inconsistent verdict is logged for tuning. Error, timeout or budget refusal: send anyway with no claim of verification.
+   - **Claim wording:** one factual statement per frame, never a time range that touches another frame ("Frame 1 (02:03): a person is on the bed. Frame 2 (02:08): no person is on the bed. Frame 3 (02:13): no person is on the bed.").
 3. **Writing:** Muse Spark `write_alert(facts, language)` from structured facts only. Validator: must contain the start time string; ≤ 300 chars; no banned terms (medical, diagnostic or emotional-interpretation words in en/hi/kn, list in `prompts/banned_terms.txt`); else the per-language template. **Messages only state what was seen and when.**
 4. Hand over to claim and escalation (§3.8).
 
@@ -771,21 +771,36 @@ Scripts in `scratch/` (gitignored) print only status, shapes, timings and `usage
 
 Total is well under $0.10. **Step 0 outputs stay in `scratch/` only (gitignored) and are never committed.** Committed fixtures are recorded from Tue 27 Oct onward (hand-written synthetic mocks on Tue, real recordings from Wed). §7.1 and any changed design decisions are updated with the results in PLAN.md.
 
-### 7.4 Test call results (2 of 10 used, Mon 26 Oct ~11:30 PM IST)
+### 7.4 Test call results (10 of 10 used: calls 1–2 Mon 26 Oct ~11:30 PM, calls 3–10 Tue 27 Oct ~3 PM IST)
 
 | # | Result |
 |---|---|
 | 1 | `GET /v1/models` returned **200** (1.5 s). Available to your team: `muse-spark-1.3`, `muse-spark-1.2`, `muse-spark-1.1`, `muse-spark-1.3-contributor`, `muse-spark-1.2-contributor`, `muse-wonder-1.0`, `sam-3.1`, `muse-voice-transcribe-1.0`, `muse-image-1.0`. Muse Image is listed for your key, but whether calls to it work from India is still unverified (not needed) |
 | 2 | Chat Completions + `response_format` json_schema + `reasoning_effort="low"` returned **200**, finish `stop`, 10.1 s. The **full §4.1 schema was accepted**: nullable unions (`["string","null"]`, `["object","null"]`), `pattern`, `enum`, `minimum/maximum`, `minItems/maxItems`. **No sentinel fallback needed.** The output parsed as valid JSON: ABSENT_FROM_ZONE, bed, 600 s, 22:00–06:00, notify `["Priya","Rahul"]`, subject_name "पापा", language hi. Correct, **except** it added an unnecessary `guard: {person, bed}`. Usage: 710 prompt tokens, 1,702 completion tokens, of which **1,616 were reasoning tokens** at "low", so ≈ **$0.008 per parse** |
+| 3 | Spark `confirm_event`, 3 × 640×480 JPEGs (person on sofa, then empty sofa twice) + JSON schema + **`reasoning_effort="minimal"` accepted**. **200**, 7.9 s. Usage: 1,361 prompt tokens (≈ **400 tokens per 640 px image**), 245 completion tokens (203 reasoning), so ≈ **$0.003 per check**. `visible_summary` was exactly right ("First frame shows person lying on sofa; second and third frames show empty sofa"), **but `consistent: false`, confidence high**, because my claim said the person was on the sofa at 02:03 *and* absent from 02:03. Leads to the "advisory only" change in §3.6 |
+| 4 | SAM "person" on (a), daylight. **200**, 6.2 s (first call), 1 instance, **c = 0.95**, tight full-body mask. Mask raster is **box-local at full resolution** (raster 391×114 = box size), placed at `bounds`. `usage` is all zeros except `images_processed: 1`. 9 stream events; the parser handled them with no diagnostics |
+| 5 | SAM **"sofa"** on (a) (your "bed" is a sofa; the concept follows the furniture). **200**, 5.7 s, 1 instance, c = 0.88, clean outline. The mask **excludes the part hidden by the person**; see §3.4 column-fill |
+| 6 | SAM "flame" on (d): a small **blue** gas flame in a dim kitchen. **200**, 2.4 s, 1 instance, **c = 0.51**, box exactly on the lit burner. **Stove scenario is go.** Confidence is lower than for people, so the flame threshold stays at 0.35 and the flame uses its own debounce |
+| 7 | SAM "person" on (c), lying on the sofa with dim light. **200**, 4.5 s, 1 instance, **c = 0.88**. **Night is viable** at this light level |
+| 8 | SAM "main door" on (e) (wall portrait blurred before upload). **200**, 4.0 s, 1 instance, c = 0.93, but it outlined the **open door leaf**, not the doorway you stood in. Leads to the door "near" rule in §3.4 |
+| 9 | Voice Transcribe on (f): **400** `You must specify the 'audioEncoding' field`. The docs example uses `"audioEncoding": "WAV"` |
+| 10 | Voice Transcribe retry with `audioEncoding: "WAV"`, `languageBias: ["Hindi"]`, 9.8 s note. **200**, 4.3 s. **The transcript text was lost**: the script printed it before saving, and the Windows console couldn't encode Devanagari. The request format is confirmed; transcript quality is checked on Wed 28 Oct when `MetaTranscriber` records its first fixture (script now saves before printing and forces UTF-8 output) |
 
-**Design changes from these results:**
+**Audio without ffmpeg:** the WhatsApp voice note is OGG/Opus, 16 kHz mono. Python `soundfile` (libsndfile 1.2.2, bundled wheel) decodes it and writes 16 kHz 16-bit PCM WAV, which Voice Transcribe accepts. **The voice-note path uses `soundfile`, not ffmpeg.** ffmpeg is only needed for the alert MP4 clip and the check-in recording (Chrome records WebM, which libsndfile can't read). Both are P1/P2, so installing ffmpeg is no longer urgent.
+
+**Design changes from calls 3–10 (27 Oct):**
+- **Event verification is advisory only** and never suppresses an alert (§3.6). Claims are written per frame. Use `reasoning_effort="minimal"` for verification, restatement and alert writing (call 3: 203 reasoning tokens versus 1,616 at "low").
+- **Zone masks are column-filled** before the overlap test (§3.4). Without it, a person lying on the bed reads as "not in bed" (overlap 0.16), which would fire false alerts on the main scenario.
+- **Door zones use the "near" test** for PRESENT_IN_ZONE (§3.4).
+- **Budget numbers:** SAM ≈ 2.5–6 s per call (so the 1.5 s frame interval only matters for change detection; SAM runs at most every 2 s per subject, and latest-frame-wins drops the rest). Spark vision ≈ 400 input tokens per frame.
+- **Main scene furniture:** the demo is filmed on the sofa unless you have a bed to use. Either works; the rule says what the family says ("sofa" or "bed").
+
+**Design changes from calls 1–2 (26 Oct):**
 - **Code-side validation is necessary, not optional.** Constrained decoding guarantees the shape, not the meaning. The validator **drops `guard` unless the condition is `NO_PERSON_NEAR`**, and a few-shot example with `guard: null` is added.
 - **Reasoning tokens dominate cost and latency.** Try `reasoning_effort="minimal"` in test call 3 (vision). If quality holds, use "minimal" for restatement, alert writing and reply classification, and keep "low" for rule parsing only. Budget estimate per Spark call: assume ~2k output tokens (≈ $0.009) until measured. Per-event Spark cost (verify + write) is ≈ $0.02, still trivial.
-- **Latency of ~10 s** is fine for rule setup (the "मैंने सुना" transcript echo covers the wait) but matters for alerts. So alert verification and writing run **in parallel** (`asyncio.gather`). The writer doesn't need the verifier's answer; if the verifier then says "inconsistent + high confidence," the written alert is held instead of sent. The template alert is sent if Spark takes longer than 15 s.
+- **Latency of ~10 s** is fine for rule setup (the "मैंने सुना" transcript echo covers the wait) but matters for alerts. So alert verification and writing run **in parallel** (`asyncio.gather`). The writer doesn't need the verifier's answer, and since 27 Oct the verifier is advisory only (§3.6), so it never holds the alert back. The template alert is sent if Spark takes longer than 15 s.
 - **`.env` format:** your file has `META_API_KEY = …` (space before `=`). `config.py` must strip whitespace around names and values. pydantic-settings / python-dotenv should handle it; a unit test will cover it.
-- **Local Python is 3.14.5**, which `meta_sam_parser` supports (CI tests 3.10–3.14). Virtualenv `.venv/` (gitignored) has `openai 3.38.0`, `httpx 0.28.1`, `meta-sam-parser 0.1.0`, `numpy`, `pillow`. **ffmpeg is not installed yet** (`winget install ffmpeg`), which is needed for call 9.
-
-Calls 3–9 are **waiting on your assets** in `scratch/assets/` (photos a–e, voice note f, §7.3).
+- **Local Python is 3.14.5**, which `meta_sam_parser` supports (CI tests 3.10–3.14). Virtualenv `.venv/` (gitignored) has `openai 3.38.0`, `httpx 0.28.1`, `meta-sam-parser 0.1.0`, `numpy`, `pillow`, `soundfile`.
 
 ---
 

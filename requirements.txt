@@ -8,6 +8,7 @@ openai>=1.40
 meta_sam_parser>=0.0.6
 numpy>=1.26
 pillow>=10.0
+soundfile>=0.12
 tzdata>=2024.1
 
 # tests
