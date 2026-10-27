@@ -27,8 +27,10 @@ log = logging.getLogger("kinwatch.watcher")
 
 SUBJECT_CONCEPTS = {Subject.PERSON: "person", Subject.DOG: "dog", Subject.CAT: "cat", Subject.FLAME: "flame"}
 GUARD_STALE_SEC = 90  # a guard reading older than this counts as unknown
+CAMERA_LOST_SEC = 120  # no frame for this long while a rule is watching: tell the family once
 
 EventHandler = Callable[[Rule, Transition, list[Frame], Zone, bool], Awaitable[None]]
+CameraHandler = Callable[[str, float], Awaitable[None]]  # ("lost" | "back", since)
 
 
 @dataclass
@@ -59,11 +61,14 @@ class Watcher:
     frames: FrameBuffer
     household_id: int
     on_event: EventHandler | None = None
+    on_camera: CameraHandler | None = None
     runtimes: dict[int, Runtime] = field(default_factory=dict)
     _last_call: dict[str, float] = field(default_factory=dict)
     _inflight: set[str] = field(default_factory=set)
     _detectors: dict[str, ChangeDetector] = field(default_factory=dict)
     _tasks: set[asyncio.Task] = field(default_factory=set)
+    _started: float | None = None
+    _camera_lost: bool = False
 
     # --- rules ------------------------------------------------------------------------------------
 
@@ -147,6 +152,26 @@ class Watcher:
     async def tick(self, now: float, frame: Frame | None = None) -> None:
         for rt in list(self.runtimes.values()):
             await self._handle(rt, rt.engine.tick(now), frame)
+        await self._check_camera(now)
+
+    async def _check_camera(self, now: float) -> None:
+        """A camera that silently stops looks exactly like "all quiet", so say so (PLAN.md §6.3)."""
+        if self._started is None:
+            self._started = now
+        latest = self.frames.latest()
+        last = latest.ts if latest is not None else self._started
+        watching = any(rt.zone is not None and rt.engine.phase != Phase.OUT_OF_WINDOW for rt in self.runtimes.values())
+        if not self._camera_lost and watching and now - last > CAMERA_LOST_SEC:
+            self._camera_lost = True
+            self.storage.add_timeline(self.household_id, now, "camera_lost",
+                                      f"{local_hhmm(now)} no pictures from the camera since {local_hhmm(last)}")
+            if self.on_camera is not None:
+                await self.on_camera("lost", last)
+        elif self._camera_lost and latest is not None and now - latest.ts <= CAMERA_LOST_SEC / 4:
+            self._camera_lost = False
+            self.storage.add_timeline(self.household_id, now, "camera_back", f"{local_hhmm(now)} camera is back")
+            if self.on_camera is not None:
+                await self.on_camera("back", now)
 
     # --- analysis ---------------------------------------------------------------------------------
 

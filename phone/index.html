@@ -22,6 +22,7 @@
   .ok #dot { background:var(--ok); } .warn #dot { background:var(--warn); } .bad #dot { background:var(--bad); }
   #details { color:var(--muted); font-size:14px; display:none; }
   #error { color:#ffb4b4; max-width:30em; display:none; }
+  #hint { color:#ffd27a; max-width:30em; display:none; font-size:14px; }
   #dimBtn, #rotateBtn { background:#2a2f34; color:var(--fg); display:none; }
   .row { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
   #dim { position:fixed; inset:0; background:#000; display:none; z-index:10; }
@@ -38,6 +39,7 @@
   <div id="status"><span id="dot"></span><span id="statusText"></span></div>
   <div id="details"></div>
   <p id="error"></p>
+  <p id="hint"></p>
   <div class="row">
     <button id="rotateBtn" title="Rotate the picture">↻ Rotate · घुमाएँ</button>
     <button id="dimBtn">Dim screen · स्क्रीन धीमी करें</button>
@@ -66,6 +68,8 @@ const token = readToken();
 let stream = null, track = null, wakeLock = null;
 let intervalMs = 1500, failures = 0, inFlight = false, timer = null;
 let lastOk = null, armedRules = 0;
+let lastVideoTime = -1, stuckTicks = 0, restarting = false;
+const FROZEN_TICKS = 4;  // the video clock hasn't moved for this many uploads: reopen the camera
 let rotation = 0;  // degrees clockwise applied to uploaded frames (for phones with auto-rotate off)
 try { rotation = parseInt(localStorage.getItem("kinwatch_rotation") || "0", 10) || 0; } catch (e) {}
 
@@ -85,11 +89,34 @@ function updateDetails() {
   $("details").style.display = "block";
 }
 
+function showHint(text) { $("hint").textContent = text; $("hint").style.display = text ? "block" : "none"; }
+
+// Telegram's and other apps' built-in browsers pause the camera when you switch away and often can't
+// keep the screen on, which looks like "the camera got stuck".
+function inAppBrowser() {
+  const ua = navigator.userAgent || "";
+  return Boolean(window.TelegramWebviewProxy) || /Telegram|FBAN|FBAV|Instagram|; wv\)/i.test(ua);
+}
+
+function stopCamera() {
+  if (stream) stream.getTracks().forEach((t) => { try { t.stop(); } catch (e) {} });
+  stream = null; track = null;
+}
+
+async function restartCamera(reason) {
+  if (restarting) return;
+  restarting = true;
+  setStatus("warn", "Reopening camera · कैमरा फिर से खुल रहा है");
+  try { stopCamera(); await startCamera(); lastVideoTime = -1; stuckTicks = 0; }
+  catch (e) { retryCamera(); }
+  finally { restarting = false; }
+}
+
 async function startCamera() {
   stream = await navigator.mediaDevices.getUserMedia({
     video: { facingMode: "environment", width: { ideal: 1280 } }, audio: false });
   track = stream.getVideoTracks()[0];
-  track.addEventListener("ended", () => { setStatus("bad", "Camera stopped · कैमरा बंद"); retryCamera(); });
+  track.addEventListener("ended", () => { setStatus("bad", "Camera stopped · कैमरा बंद"); restartCamera("ended"); });
   $("preview").srcObject = stream;
   $("preview").style.display = "block";
   await $("preview").play().catch(() => {});
@@ -103,12 +130,29 @@ function retryCamera() {
 }
 
 async function keepAwake() {
-  if (!("wakeLock" in navigator)) return;
+  if (!("wakeLock" in navigator)) {
+    showHint("This browser can't keep the screen on. Set the phone's screen timeout to the maximum, or open the link in Chrome.");
+    return;
+  }
   try { wakeLock = await navigator.wakeLock.request("screen"); } catch (e) { /* low battery or not allowed */ }
 }
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && stream) keepAwake();
+  if (document.visibilityState !== "visible" || $("start").style.display !== "none") return;
+  // Back from the background: the camera may have been stopped and timers throttled.
+  keepAwake();
+  if (!track || track.readyState === "ended") restartCamera("resume");
+  schedule(0);
 });
+
+function checkFrozen() {
+  const v = $("preview");
+  if (v.paused) v.play().catch(() => {});
+  if (!track || track.readyState === "ended") { restartCamera("ended"); return true; }
+  stuckTicks = v.currentTime === lastVideoTime ? stuckTicks + 1 : 0;
+  lastVideoTime = v.currentTime;
+  if (stuckTicks >= FROZEN_TICKS) { restartCamera("frozen"); return true; }
+  return false;
+}
 
 function grab() {
   const v = $("preview");
@@ -137,6 +181,7 @@ async function tick() {
   if (inFlight) return schedule(intervalMs);  // latest frame wins; never queue uploads
   inFlight = true;
   try {
+    if (restarting || checkFrozen()) { schedule(1000); return; }  // don't upload a stale picture
     const blob = await grab();
     if (!blob) { schedule(500); return; }
     const res = await fetch("/api/frame", {
@@ -191,6 +236,10 @@ $("start").addEventListener("click", async () => {
   $("rotateBtn").style.display = "inline-block";
   applyRotationPreview();
   setStatus("ok", "Starting · शुरू हो रहा है");
+  if (inAppBrowser()) {
+    showHint("You're in an app's built-in browser, which pauses the camera. For reliable watching, open this " +
+             "link in Chrome (⋮ menu → Open in browser).");
+  }
   await keepAwake();
   tick();
   setInterval(updateDetails, 5000);

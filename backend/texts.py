@@ -111,6 +111,19 @@ _TEXTS: dict[str, dict[Language, str]] = {
         "hi": " तस्वीर खड़ी है: अगर टेढ़ी दिखे, तो कैमरा पेज पर ↻ दबाएँ।",
         "kn": " ಚಿತ್ರ ನೇರವಾಗಿ ನಿಂತಿದೆ: ಓರೆಯಾಗಿ ಕಂಡರೆ ಕ್ಯಾಮೆರಾ ಪುಟದಲ್ಲಿ ↻ ಒತ್ತಿ.",
     },
+    "camera_lost": {
+        "en": "📷 The camera stopped sending pictures at {time}, so I can't watch right now. "
+              "Open the camera link on the camera phone again (in Chrome) and keep that page on screen.",
+        "hi": "📷 कैमरे ने {time} से तस्वीरें भेजना बंद कर दिया है, इसलिए मैं अभी नज़र नहीं रख पा रहा। "
+              "कैमरा फ़ोन पर कैमरा लिंक फिर से खोलें (Chrome में) और वह पेज स्क्रीन पर खुला रखें।",
+        "kn": "📷 {time}ರಿಂದ ಕ್ಯಾಮೆರಾ ಚಿತ್ರಗಳನ್ನು ಕಳುಹಿಸುತ್ತಿಲ್ಲ, ಹಾಗಾಗಿ ನಾನು ಈಗ ಗಮನಿಸಲಾರೆ. "
+              "ಕ್ಯಾಮೆರಾ ಫೋನ್‌ನಲ್ಲಿ ಕ್ಯಾಮೆರಾ ಲಿಂಕ್ ಮತ್ತೆ ತೆರೆಯಿರಿ (Chrome ನಲ್ಲಿ) ಮತ್ತು ಆ ಪುಟವನ್ನು ತೆರೆದೇ ಇಡಿ.",
+    },
+    "camera_back": {
+        "en": "📷 The camera is back. I'm watching again.",
+        "hi": "📷 कैमरा वापस चालू है। मैं फिर से नज़र रख रहा हूँ।",
+        "kn": "📷 ಕ್ಯಾಮೆರಾ ಮತ್ತೆ ಬಂದಿದೆ. ನಾನು ಮತ್ತೆ ಗಮನಿಸುತ್ತಿದ್ದೇನೆ.",
+    },
     "button_yes": {"en": "Yes ✓", "hi": "हाँ ✓", "kn": "ಹೌದು ✓"},
     "button_no": {"en": "No ✗", "hi": "नहीं ✗", "kn": "ಇಲ್ಲ ✗"},
     "clarify_time_window": {

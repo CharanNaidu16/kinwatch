@@ -188,3 +188,35 @@ def test_without_a_before_frame_every_statement_is_the_condition():
     rule = Rule(household_id=1, created_by=1, original_text="x", subject=Subject.PERSON, zone_object="sofa",
                 condition=Condition.NO_PERSON_NEAR, duration_sec=60, notify=[1], language="en")
     assert frame_statements(rule, 2, has_before=False) == ["no person is near the sofa"] * 2
+
+
+async def test_camera_going_quiet_is_reported_once_and_its_return_too(world):
+    notices = []
+
+    async def on_camera(kind, since):
+        notices.append(kind)
+
+    world.watcher.on_camera = on_camera
+    await arm(world)
+    await world.see(IN_BED)
+    for _ in range(5):  # 5 minutes without a single frame
+        world.clock.advance(60)
+        await world.watcher.tick(world.clock.now())
+    assert notices == ["lost"]
+    await world.see(IN_BED)
+    assert notices == ["lost", "back"]
+    kinds = [r["kind"] for r in world.storage.timeline(world.router.household_id, 50)]
+    assert "camera_lost" in kinds and "camera_back" in kinds
+
+
+async def test_no_camera_notice_when_nothing_is_armed(world):
+    notices = []
+
+    async def on_camera(kind, since):
+        notices.append(kind)
+
+    world.watcher.on_camera = on_camera
+    for _ in range(5):
+        world.clock.advance(60)
+        await world.watcher.tick(world.clock.now())
+    assert notices == []

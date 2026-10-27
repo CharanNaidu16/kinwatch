@@ -12,9 +12,10 @@ from pathlib import Path
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, PlainTextResponse
 
+from backend import templates
 from backend.alerts import Alerts
 from backend.budget import Budget
-from backend.clock import Clock, SystemClock
+from backend.clock import Clock, SystemClock, local_hhmm
 from backend.config import Settings, get_settings
 from backend.household import ensure_device, ensure_household
 from backend.messaging import build_messenger
@@ -22,6 +23,7 @@ from backend.messaging.base import Inbound, WebhookRejected
 from backend.models import build_adapters
 from backend.router import Router
 from backend.storage import Storage
+from backend.texts import text
 from backend.vision import ChangeDetector, FrameBuffer, FrameError, load_frame
 from backend.watcher import Watcher
 
@@ -74,6 +76,15 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None, sto
         watcher = Watcher(storage=db, settings=settings, clock=clock, adapters=app.state.adapters,
                           frames=app.state.frames, household_id=app.state.household_id, on_event=alerts.on_event)
         router.watcher, router.alerts = watcher, alerts
+
+        async def camera_notice(kind: str, since: float) -> None:
+            lang = settings.household_language
+            message = text(f"camera_{kind}", lang, time=templates.spoken_time(local_hhmm(since), lang))
+            for m in db.members(app.state.household_id):
+                if m.is_admin:
+                    await router.send(m, "info", message)
+
+        watcher.on_camera = camera_notice
         app.state.router, app.state.alerts, app.state.watcher = router, alerts, watcher
         watcher.reload()
 
