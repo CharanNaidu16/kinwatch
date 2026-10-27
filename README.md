@@ -28,6 +28,15 @@ uvicorn backend.main:app
 
 `GET /healthz` reports the mode; `GET /api/budget?t=<BTS_TOKEN>` shows API usage and caps.
 
+## Check your Meta API key (about $0.02)
+
+```bash
+python scripts/live_check.py --spend --voice note.ogg --image photo.jpg --zone bed
+```
+
+One real call each to Muse Voice Transcribe, Muse Spark and SAM 3.1, counted by the budget guard.
+Responses are saved under `fixtures/recorded/` with family names replaced by `{MEMBER:n}`.
+
 ## License
 
 MIT, see [LICENSE](LICENSE).

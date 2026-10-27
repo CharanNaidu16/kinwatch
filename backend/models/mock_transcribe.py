@@ -1,4 +1,5 @@
-"""Mock Muse Voice Transcribe: fixture transcripts by audio hash, else the main Hindi demo sentence."""
+"""Mock Muse Voice Transcribe: fixture transcripts by audio hash (recorded, then hand-written), else the
+main Hindi demo sentence."""
 from __future__ import annotations
 
 import hashlib
@@ -8,6 +9,7 @@ import wave
 from pathlib import Path
 
 from backend.models.base import Transcript
+from backend.recorder import RECORDED
 
 FIXTURES = Path(__file__).resolve().parent.parent.parent / "fixtures" / "mock" / "asr.json"
 DEFAULT_TRANSCRIPT = "पापा अगर रात को उठें और दस मिनट में वापस न आएँ तो मुझे और राहुल को बताना"
@@ -22,8 +24,11 @@ def _duration_ms(wav: bytes) -> int:
 
 
 class MockTranscriber:
-    def __init__(self, fixtures: Path = FIXTURES) -> None:
-        self._by_hash: dict[str, str] = json.loads(fixtures.read_text(encoding="utf-8")) if fixtures.exists() else {}
+    def __init__(self, fixtures: tuple[Path, ...] = (FIXTURES, RECORDED / "asr.json")) -> None:
+        self._by_hash: dict[str, str] = {}
+        for path in fixtures:
+            if path.exists():
+                self._by_hash.update(json.loads(path.read_text(encoding="utf-8")))
 
     async def transcribe(self, wav: bytes, language_bias: list[str]) -> Transcript:
         digest = hashlib.sha256(wav).hexdigest()

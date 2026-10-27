@@ -1,7 +1,8 @@
 """Mock Muse Spark: fixture answers for known sentences, keyword heuristics otherwise, templates for writing.
 
-Fixture notify lists use "me", "everyone" or "{MEMBER:n}" (1-based, household order), so the same
-fixtures work with whatever real names are configured.
+Fixtures are looked up recorded-first (real muse-spark-1.3 answers, fixtures/recorded/), then the
+hand-written ones (fixtures/mock/). Names appear as "{MEMBER:n}" (1-based, household order), so the
+same fixtures work with whatever real names are configured.
 """
 from __future__ import annotations
 
@@ -11,10 +12,12 @@ import unicodedata
 from pathlib import Path
 
 from backend import templates
+from backend.recorder import RECORDED, fill, scrub
 from backend.models.base import Correction, InstanceDesc, TimedFrame, Verification
 from backend.schemas import EventFacts, Language, ParsedRule, Rule
 
 FIXTURES = Path(__file__).resolve().parent.parent.parent / "fixtures" / "mock" / "spark_parse_rule.json"
+RECORDED_FIXTURES = RECORDED / "spark_parse_rule.json"
 
 _DEVANAGARI = re.compile(r"[ऀ-ॿ]")
 _KANNADA = re.compile(r"[ಀ-೿]")
@@ -54,22 +57,17 @@ def _has(text: str, *words: str) -> bool:
 
 
 class MockSpark:
-    def __init__(self, fixtures: Path = FIXTURES) -> None:
-        entries = json.loads(fixtures.read_text(encoding="utf-8")) if fixtures.exists() else []
-        self._fixtures = {normalize(e["text"]): e["response"] for e in entries}
+    def __init__(self, fixtures: tuple[Path, ...] = (FIXTURES, RECORDED_FIXTURES)) -> None:
+        self._fixtures: dict[str, dict] = {}
+        for path in fixtures:  # later files win, so recorded answers override hand-written ones
+            entries = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+            self._fixtures.update({normalize(e["text"]): e["response"] for e in entries})
 
     async def parse_rule(self, text: str, members: list[str], sender: str) -> ParsedRule:
-        raw = self._fixtures.get(normalize(text)) or self._heuristic(text)
-        raw = dict(raw)
-        raw["notify"] = [self._fill(n, members) for n in raw["notify"]]
+        key = normalize(scrub(text, [[m] for m in members]))
+        raw = self._fixtures.get(key) or self._fixtures.get(normalize(text)) or self._heuristic(text)
+        raw = json.loads(fill(json.dumps(raw, ensure_ascii=False), members))
         return ParsedRule.model_validate(raw)
-
-    @staticmethod
-    def _fill(name: str, members: list[str]) -> str:
-        if m := re.fullmatch(r"\{MEMBER:(\d+)\}", name):
-            i = int(m.group(1)) - 1
-            return members[i] if 0 <= i < len(members) else name
-        return name
 
     @staticmethod
     def _heuristic(text: str) -> dict:
@@ -114,7 +112,7 @@ class MockSpark:
             return Correction("select_instance", instance=1 if current == 2 else 2)
         return Correction("reparse", new_text=reply)
 
-    async def confirm_event(self, frames: list[TimedFrame], claim: str) -> Verification:
+    async def confirm_event(self, frames: list[TimedFrame], statements: list[str]) -> Verification:
         return Verification(consistent=True, visible_summary="(mock) frames match the claim", confidence="high")
 
     async def write_alert(self, facts: EventFacts) -> str:

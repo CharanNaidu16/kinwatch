@@ -795,6 +795,12 @@ Total is well under $0.10. **Step 0 outputs stay in `scratch/` only (gitignored)
 - **Budget numbers:** SAM ≈ 2.5–6 s per call (so the 1.5 s frame interval only matters for change detection; SAM runs at most every 2 s per subject, and latest-frame-wins drops the rest). Spark vision ≈ 400 input tokens per frame.
 - **Main scene furniture (decided 27 Oct):** filmed on the sofa, but the rule and every message say **"bed" (बिस्तर)**. `ZONE_CONCEPTS_JSON={"bed":"sofa"}` in `.env` maps the family's word to what SAM looks for, so the camera searches for "sofa" (tested, c = 0.88) while the family reads "bed." Whether SAM's "bed" alone would find the sofa was never tested; the mapping makes that irrelevant.
 
+**First live run of the real adapters (27 Oct, `scripts/live_check.py`, 3 calls, $0.0064 total):**
+- Voice Transcribe on your Hindi note: **word for word** ("पापा अगर रात को उठे और दस मिनट में वापस नहीं आए तो मुझे बताना।"), 4.1 s.
+- Spark `parse_rule` on that transcript with the new few-shot examples: correct rule, **`guard: null`** (the spurious guard from call 2 is gone), 4.9 s.
+- SAM with `ZONE_CONCEPTS_JSON={"bed":"sofa"}`: "bed" → "sofa", 1 instance, c = 0.88, 6.6 s.
+- **SAM mask decoding is CPU-heavy** (pure Python arithmetic decoder): ~1.2 s for a sofa-sized mask (409×290), ~0.4 s for a person. The official stream parser decodes every mask once just to validate it, which doubled that. `meta_sam.py` now reads SAM's record syntax itself (the payload alphabet excludes every delimiter) and decodes each mask **once** with Meta's `decode_mask_to_raster`, in a worker thread. A test checks the result against the official parser pixel for pixel. Zone masks are decoded rarely (confirmation, 20-min refresh), so the steady-state cost is ~0.4 s CPU per subject call.
+
 **Design changes from calls 1–2 (26 Oct):**
 - **Code-side validation is necessary, not optional.** Constrained decoding guarantees the shape, not the meaning. The validator **drops `guard` unless the condition is `NO_PERSON_NEAR`**, and a few-shot example with `guard: null` is added.
 - **Reasoning tokens dominate cost and latency.** Try `reasoning_effort="minimal"` in test call 3 (vision). If quality holds, use "minimal" for restatement, alert writing and reply classification, and keep "low" for rule parsing only. Budget estimate per Spark call: assume ~2k output tokens (≈ $0.009) until measured. Per-event Spark cost (verify + write) is ≈ $0.02, still trivial.

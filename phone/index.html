@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Kinwatch camera</title>
+<style>
+  :root { --bg:#101214; --fg:#f2f2f2; --muted:#9aa0a6; --ok:#2e9d5b; --warn:#d99a1e; --bad:#d64545; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg);
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Devanagari", sans-serif; }
+  main { min-height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:16px; padding:16px; text-align:center; }
+  h1 { font-size:22px; margin:0; }
+  .hint { color:var(--muted); max-width:30em; }
+  button { font:inherit; border:0; border-radius:12px; padding:14px 22px; cursor:pointer; }
+  #start { background:var(--ok); color:#fff; font-size:20px; padding:18px 34px; }
+  #preview { width:100%; max-width:480px; border-radius:12px; background:#000; display:none; }
+  #status { display:none; align-items:center; gap:8px; padding:8px 14px; border-radius:999px; background:#1d2125; }
+  #dot { width:12px; height:12px; border-radius:50%; background:var(--muted); }
+  .ok #dot { background:var(--ok); } .warn #dot { background:var(--warn); } .bad #dot { background:var(--bad); }
+  #details { color:var(--muted); font-size:14px; display:none; }
+  #error { color:#ffb4b4; max-width:30em; display:none; }
+  #dimBtn { background:#2a2f34; color:var(--fg); display:none; }
+  #dim { position:fixed; inset:0; background:#000; display:none; z-index:10; }
+  #dim span { position:absolute; right:14px; bottom:14px; width:8px; height:8px; border-radius:50%; background:var(--ok); opacity:.6; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Kinwatch camera · कैमरा</h1>
+  <p class="hint" id="intro">Put this phone where it can see the room, plug it in, then tap Start.<br>
+    फ़ोन को ऐसी जगह रखें जहाँ से कमरा दिखे, चार्जर लगाएँ, फिर Start दबाएँ।</p>
+  <button id="start">Start watching · शुरू करें</button>
+  <video id="preview" playsinline muted autoplay></video>
+  <div id="status"><span id="dot"></span><span id="statusText"></span></div>
+  <div id="details"></div>
+  <p id="error"></p>
+  <button id="dimBtn">Dim screen · स्क्रीन धीमी करें</button>
+</main>
+<div id="dim" title="Tap to wake"><span></span></div>
+<canvas id="canvas" hidden></canvas>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const TARGET_WIDTH = 640, JPEG_QUALITY = 0.7;
+const BACKOFF_MS = [1500, 3000, 6000, 12000, 30000];
+
+function readToken() {
+  const fromUrl = new URLSearchParams(location.search).get("d");
+  if (fromUrl) {
+    try { localStorage.setItem("kinwatch_device", fromUrl); } catch (e) {}
+    // Keep the token off the screen (and out of any screen recording).
+    history.replaceState(null, "", location.pathname);
+    return fromUrl;
+  }
+  try { return localStorage.getItem("kinwatch_device"); } catch (e) { return null; }
+}
+
+const token = readToken();
+let stream = null, track = null, wakeLock = null;
+let intervalMs = 1500, failures = 0, inFlight = false, timer = null;
+let lastOk = null, armedRules = 0;
+
+function setStatus(kind, text) {
+  $("status").className = kind;
+  $("status").style.display = "flex";
+  $("statusText").textContent = text;
+}
+function showError(text) { $("error").textContent = text; $("error").style.display = text ? "block" : "none"; }
+function updateDetails() {
+  const ago = lastOk ? Math.round((Date.now() - lastOk) / 1000) + " s ago" : "never";
+  $("details").textContent = `Last upload: ${ago} · Rules on: ${armedRules}`;
+  $("details").style.display = "block";
+}
+
+async function startCamera() {
+  stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: "environment", width: { ideal: 1280 } }, audio: false });
+  track = stream.getVideoTracks()[0];
+  track.addEventListener("ended", () => { setStatus("bad", "Camera stopped · कैमरा बंद"); retryCamera(); });
+  $("preview").srcObject = stream;
+  $("preview").style.display = "block";
+  await $("preview").play().catch(() => {});
+}
+
+function retryCamera() {
+  setTimeout(async () => {
+    try { await startCamera(); setStatus("ok", "Watching · नज़र रख रहा है"); }
+    catch (e) { retryCamera(); }
+  }, 10000);
+}
+
+async function keepAwake() {
+  if (!("wakeLock" in navigator)) return;
+  try { wakeLock = await navigator.wakeLock.request("screen"); } catch (e) { /* low battery or not allowed */ }
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && stream) keepAwake();
+});
+
+function grab() {
+  const v = $("preview");
+  if (!v.videoWidth) return Promise.resolve(null);
+  const scale = Math.min(1, TARGET_WIDTH / Math.max(v.videoWidth, v.videoHeight));
+  const c = $("canvas");
+  c.width = Math.round(v.videoWidth * scale);
+  c.height = Math.round(v.videoHeight * scale);
+  c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+  return new Promise((resolve) => c.toBlob(resolve, "image/jpeg", JPEG_QUALITY));
+}
+
+function schedule(ms) {
+  clearTimeout(timer);
+  timer = setTimeout(tick, ms);
+}
+
+async function tick() {
+  if (inFlight) return schedule(intervalMs);  // latest frame wins; never queue uploads
+  inFlight = true;
+  try {
+    const blob = await grab();
+    if (!blob) { schedule(500); return; }
+    const res = await fetch("/api/frame", {
+      method: "POST", body: blob, cache: "no-store",
+      headers: { "Content-Type": "image/jpeg", "X-Device-Token": token, "X-Captured-At": String(Date.now()) },
+    });
+    if (res.status === 401) {
+      setStatus("bad", "Wrong camera link · लिंक गलत है");
+      showError("Open the camera link Kinwatch sent you again.");
+      return;  // stop: retrying with a bad token won't help
+    }
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const body = await res.json();
+    failures = 0;
+    lastOk = Date.now();
+    intervalMs = body.next_interval_ms || 1500;
+    armedRules = body.armed_rules || 0;
+    setStatus("ok", body.dark ? "Watching (too dark) · बहुत अंधेरा" : "Watching · नज़र रख रहा है");
+    showError("");
+    schedule(intervalMs);
+  } catch (e) {
+    failures += 1;
+    const base = BACKOFF_MS[Math.min(failures - 1, BACKOFF_MS.length - 1)];
+    setStatus("warn", "Offline, retrying · दोबारा कोशिश");
+    schedule(base * (0.8 + Math.random() * 0.4));
+  } finally {
+    inFlight = false;
+    updateDetails();
+  }
+}
+
+$("start").addEventListener("click", async () => {
+  if (!token) { showError("This link is missing its camera code. Open the link Kinwatch sent you."); return; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showError("This browser can't use the camera. Open the link in Chrome."); return;
+  }
+  $("start").disabled = true;
+  try {
+    await startCamera();
+  } catch (e) {
+    $("start").disabled = false;
+    showError(e && e.name === "NotAllowedError"
+      ? "Camera blocked. Tap the lock icon in the address bar → Camera → Allow, then tap Start again. " +
+        "कैमरा की अनुमति दें: पता बार में ताले के निशान पर टैप करें → Camera → Allow."
+      : "Couldn't open the camera: " + (e && e.message ? e.message : e));
+    setStatus("bad", "Camera blocked · कैमरा बंद");
+    return;
+  }
+  $("start").style.display = "none";
+  $("intro").style.display = "none";
+  $("dimBtn").style.display = "inline-block";
+  setStatus("ok", "Starting · शुरू हो रहा है");
+  await keepAwake();
+  tick();
+  setInterval(updateDetails, 5000);
+});
+
+$("dimBtn").addEventListener("click", () => { $("dim").style.display = "block"; });
+$("dim").addEventListener("click", () => { $("dim").style.display = "none"; });
+</script>
+</body>
+</html>

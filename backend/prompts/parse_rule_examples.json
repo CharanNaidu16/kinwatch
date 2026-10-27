@@ -1,0 +1,33 @@
+[
+  {
+    "household": ["Asha", "Vikram"], "sender": "Asha",
+    "message": "पापा अगर रात को उठें और दस मिनट में वापस न आएँ तो मुझे और विक्रम को बताना",
+    "rule": {"status": "ok", "clarifying_question": null, "subject": "person", "subject_name": "पापा",
+             "zone_object": "bed", "condition": "ABSENT_FROM_ZONE", "duration_sec": 600,
+             "time_window": {"start": "22:00", "end": "06:00"}, "guard": null,
+             "notify": ["Asha", "Vikram"], "language": "hi"}
+  },
+  {
+    "household": ["Asha", "Vikram"], "sender": "Asha",
+    "message": "Tell me if the stove is on and nobody's in the kitchen for 5 minutes",
+    "rule": {"status": "ok", "clarifying_question": null, "subject": "person", "subject_name": null,
+             "zone_object": "gas stove", "condition": "NO_PERSON_NEAR", "duration_sec": 300,
+             "time_window": null, "guard": {"subject": "flame", "zone_object": "gas stove"},
+             "notify": ["Asha"], "language": "en"}
+  },
+  {
+    "household": ["Asha", "Vikram"], "sender": "Vikram",
+    "message": "ಅಪ್ಪ ವಾಕಿಂಗ್ ಮುಗಿಸಿ ಬಾಗಿಲಿಗೆ ಬಂದ್ರೆ ಹೇಳು",
+    "rule": {"status": "ok", "clarifying_question": null, "subject": "person", "subject_name": "ಅಪ್ಪ",
+             "zone_object": "main door", "condition": "PRESENT_IN_ZONE", "duration_sec": 0,
+             "time_window": null, "guard": null, "notify": ["Vikram"], "language": "kn"}
+  },
+  {
+    "household": ["Asha", "Vikram"], "sender": "Asha",
+    "message": "Papa ki tabiyat kharab lage toh batana",
+    "rule": {"status": "unsupported",
+             "clarifying_question": "मैं सेहत के बारे में नहीं बता सकता। मैं बस यह देख सकता हूँ कि कैमरे में क्या दिखता है — जैसे पापा रात को बिस्तर से उठें और वापस न आएँ। क्या ऐसा नियम बनाऊँ?",
+             "subject": "none", "subject_name": null, "zone_object": null, "condition": "none",
+             "duration_sec": 0, "time_window": null, "guard": null, "notify": ["Asha"], "language": "hi"}
+  }
+]

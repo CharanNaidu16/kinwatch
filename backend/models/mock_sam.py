@@ -2,16 +2,20 @@
 
 A synthetic scene paints each object as a flat rectangle in its concept's colour; each colour in a
 concept's palette is one instance (two beds = two blue shades). `synthetic_frame()` builds them.
-Real recorded SAM responses (from Wed 28 Oct) will be served from fixtures before this fallback.
+Real recorded SAM responses (fixtures/recorded/sam/, keyed by frame hash + concept) are served
+first; the colour segmentation is the fallback for synthetic frames.
 """
 from __future__ import annotations
 
 import io
+from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageDraw
 
 from backend.models.base import Box, Instance
+from backend.models.meta_sam import frame_size, instances_from_output
+from backend.recorder import RECORDED, sam_path
 
 # concept -> instance colours (RGB). Kept far apart so JPEG artefacts can't blur one into another.
 PALETTE: dict[str, list[tuple[int, int, int]]] = {
@@ -56,11 +60,15 @@ def _box_of(mask: np.ndarray) -> Box:
 
 
 class MockSegmenter:
-    def __init__(self) -> None:
+    def __init__(self, recorded: Path = RECORDED) -> None:
         self.calls: list[str] = []  # concepts requested, for tests
+        self.recorded = recorded
 
     async def segment(self, jpeg: bytes, concept: str, *, purpose: str = "segment_subject") -> list[Instance]:
         self.calls.append(concept)
+        path = sam_path(self.recorded, jpeg, " ".join(concept.split()))
+        if path.exists():
+            return instances_from_output(path.read_text(encoding="utf-8"), *frame_size(jpeg))
         colours = PALETTE.get(" ".join(concept.lower().split()))
         if not colours:
             return []  # like SAM: an unknown concept returns no matches

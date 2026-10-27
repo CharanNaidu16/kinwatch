@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     spark_model: str = "muse-spark-1.3"
     sam_model: str = "sam-3.1"
     asr_model: str = "muse-voice-transcribe-1.0"
+    record_fixtures: bool = False  # save real responses under fixtures/recorded/ (names scrubbed)
 
     wa_graph_version: str = "v25.0"
     wa_phone_number_id: str | None = None
@@ -66,6 +67,8 @@ class Settings(BaseSettings):
     sam_max_per_min: int = 20
     spark_max_per_hour: int = 120
     asr_max_sec_per_day: int = 1800
+
+    frame_interval_ms: int = Field(1500, ge=500, le=10000)  # how often the phone page uploads a frame
 
     claim_timeout_sec: int = 120
     demo_claim_timeout_sec: int = 30

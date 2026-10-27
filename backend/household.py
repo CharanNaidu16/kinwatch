@@ -1,8 +1,24 @@
 """Create the household and its members from FAMILY_MEMBERS_JSON (phone numbers never leave .env + DB)."""
 from __future__ import annotations
 
+import hashlib
+
 from backend.config import Settings
 from backend.storage import Storage
+
+
+def token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def ensure_device(storage: Storage, household_id: int, settings: Settings) -> int:
+    """The camera phone, identified by DEVICE_TOKEN (only its hash is stored)."""
+    h = token_hash(settings.device_token.get_secret_value())
+    row = storage.query_one("SELECT id FROM devices WHERE token_hash = ?", (h,))
+    if row:
+        return row["id"]
+    return storage.execute("INSERT INTO devices (household_id, name, token_hash) VALUES (?, ?, ?)",
+                           (household_id, "camera phone", h)).lastrowid
 
 
 def ensure_household(storage: Storage, settings: Settings) -> int:

@@ -1,0 +1,23 @@
+[
+  {
+    "text": "पापा अगर रात को उठे और दस मिनट में वापस नहीं आए तो मुझे बताना।",
+    "response": {
+      "clarifying_question": null,
+      "condition": "ABSENT_FROM_ZONE",
+      "duration_sec": 600,
+      "guard": null,
+      "language": "hi",
+      "notify": [
+        "{MEMBER:1}"
+      ],
+      "status": "ok",
+      "subject": "person",
+      "subject_name": "पापा",
+      "time_window": {
+        "end": "06:00",
+        "start": "22:00"
+      },
+      "zone_object": "bed"
+    }
+  }
+]
