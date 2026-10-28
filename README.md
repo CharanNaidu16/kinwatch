@@ -41,6 +41,19 @@ It starts the app and a Cloudflare quick tunnel, prints the camera link to open 
 will act as the camera, and with `MESSENGER=whatsapp` points the WhatsApp webhook at the new tunnel
 URL. Set `USE_MOCKS=false` and `META_API_KEY` to use the real Meta models.
 
+### In the chat
+
+| Send | What happens |
+|---|---|
+| a rule, typed or as a voice note | Kinwatch outlines what it will watch on a camera photo and asks you to confirm |
+| `check` | the latest camera picture |
+| `rules` | your rules, numbered, with on/paused |
+| `pause 3`, `resume 3`, `delete 3` | change rule 3 (`नियम 3 बंद` works too) |
+| `got it` (or the button) | you're handling the latest alert; the others are told |
+
+An alert nobody claims is re-sent after the claim timeout (2 min, 30 s in demo mode), then sent to
+the next person in `FAMILY_MEMBERS_JSON`, and closes after three timeouts with a final notice.
+
 ## Check your Meta API key (about $0.02)
 
 ```bash

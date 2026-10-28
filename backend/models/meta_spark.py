@@ -1,7 +1,7 @@
 """Muse Spark through Chat Completions with schema-constrained JSON (PLAN.md §3.2, §5; test calls 2-3).
 
-Restatements and alert text come from the templates until the Spark writer and its validator land
-(PLAN.md §8, Fri 30 Oct); the family only ever reads text built from the validated rule JSON.
+Restatements come from the templates, built from the validated rule JSON. Alert text is written by
+Spark from the event facts; backend.alert_check vets it and the caller falls back to the template.
 """
 from __future__ import annotations
 
@@ -27,6 +27,10 @@ VERIFY_SCHEMA = {
     "type": "object", "additionalProperties": False, "required": ["consistent", "visible_summary", "confidence"],
     "properties": {"consistent": {"type": "boolean"}, "visible_summary": {"type": "string"},
                    "confidence": {"type": "string", "enum": ["low", "medium", "high"]}},
+}
+ALERT_SCHEMA = {
+    "type": "object", "additionalProperties": False, "required": ["text"],
+    "properties": {"text": {"type": "string"}},
 }
 CORRECTION_SCHEMA = {
     "type": "object", "additionalProperties": False, "required": ["action", "instance", "new_text"],
@@ -60,6 +64,7 @@ class MetaSpark:
         self.parse_examples = json.loads((PROMPTS / "parse_rule_examples.json").read_text(encoding="utf-8"))
         self.verify_system = (PROMPTS / "confirm_event.md").read_text(encoding="utf-8")
         self.correction_system = (PROMPTS / "resolve_correction.md").read_text(encoding="utf-8")
+        self.alert_system = (PROMPTS / "write_alert.md").read_text(encoding="utf-8")
         self.last_latency_ms: int | None = None
 
     async def _json(self, purpose: str, messages: list[dict], name: str, schema: dict, effort: str,
@@ -114,4 +119,12 @@ class MetaSpark:
                             confidence=raw["confidence"])
 
     async def write_alert(self, facts: EventFacts) -> str:
-        return templates.alert(facts)
+        """Unvetted: the caller runs backend.alert_check.problems() and sends the template on any problem."""
+        payload = facts.model_dump(mode="json", exclude={"rule_id", "language"})
+        user = (f"LANGUAGE: {facts.language}\nFACTS: {json.dumps(payload, ensure_ascii=False)}\n"
+                f"REFERENCE: {templates.alert(facts)}")
+        raw = await self._json("write_alert", [{"role": "system", "content": self.alert_system},
+                                               {"role": "user", "content": user}],
+                               "alert_text", ALERT_SCHEMA, "minimal",
+                               Usage(input_tokens=700, output_tokens=EST_MINIMAL_OUT), 15.0)
+        return str(raw["text"])

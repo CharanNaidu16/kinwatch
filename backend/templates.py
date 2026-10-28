@@ -149,6 +149,14 @@ def _condition_sentence(rule: Rule, names: str, lang: Language) -> str:
     }[lang]
 
 
+def summary(rule: Rule, names: list[str]) -> str:
+    """One line per rule for the "rules" list: the condition, plus the time window if there is one."""
+    lang = rule.language
+    sentence = _condition_sentence(rule, join_names(names, lang), lang)
+    window = _window_phrase(rule, lang).strip()
+    return f"{sentence} ({window})" if window else sentence
+
+
 def restatement(rule: Rule, zone_count: int, names: list[str]) -> str:
     lang = rule.language
     zone = zone_word(rule.zone_object, lang)

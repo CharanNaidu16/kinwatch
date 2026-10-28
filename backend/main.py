@@ -95,6 +95,10 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None, sto
                     await watcher.tick(clock.now())
                 except Exception:
                     logging.getLogger("kinwatch.watcher").exception("tick failed")
+                try:
+                    await alerts.escalate(clock.now())
+                except Exception:
+                    logging.getLogger("kinwatch.alerts").exception("escalation tick failed")
 
         tick_task = asyncio.create_task(ticker())
         yield

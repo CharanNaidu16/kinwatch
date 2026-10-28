@@ -101,6 +101,72 @@ _TEXTS: dict[str, dict[Language, str]] = {
         "hi": "{name} पहले से इसे देख रहे हैं।",
         "kn": "{name} ಈಗಾಗಲೇ ಇದನ್ನು ನೋಡಿಕೊಳ್ಳುತ್ತಿದ್ದಾರೆ.",
     },
+    "resend": {
+        "en": "⏰ Nobody has tapped \"I've got it\" for {wait}.",
+        "hi": "⏰ {wait} से किसी ने \"मैं देख लूँगा\" नहीं दबाया।",
+        "kn": "⏰ {wait}ದಿಂದ ಯಾರೂ \"ನಾನು ನೋಡ್ತೀನಿ\" ಒತ್ತಿಲ್ಲ.",
+    },
+    "escalation": {
+        "en": "⚠️ {names} didn't answer, so I'm sending this to you too:",
+        "hi": "⚠️ {names} ने जवाब नहीं दिया, इसलिए आपको भी भेज रहा हूँ:",
+        "kn": "⚠️ {names} ಉತ್ತರಿಸಲಿಲ್ಲ, ಹಾಗಾಗಿ ನಿಮಗೂ ಕಳುಹಿಸುತ್ತಿದ್ದೇನೆ:",
+    },
+    "alert_expired": {
+        "en": "Nobody claimed the alert from {time}, so I've stopped reminding. "
+              "You can still tap \"I've got it\" on it.",
+        "hi": "{time} बजे वाले अलर्ट को किसी ने नहीं लिया, इसलिए मैंने याद दिलाना बंद कर दिया है। "
+              "आप अब भी उस पर \"मैं देख लूँगा\" दबा सकते हैं।",
+        "kn": "{time}ರ ಅಲರ್ಟ್ ಅನ್ನು ಯಾರೂ ತೆಗೆದುಕೊಳ್ಳಲಿಲ್ಲ, ಹಾಗಾಗಿ ನೆನಪಿಸುವುದನ್ನು ನಿಲ್ಲಿಸಿದ್ದೇನೆ. "
+              "ಆದರೂ ಅದರಲ್ಲಿ \"ನಾನು ನೋಡ್ತೀನಿ\" ಒತ್ತಬಹುದು.",
+    },
+    "rules_header": {"en": "Your rules:", "hi": "आपके नियम:", "kn": "ನಿಮ್ಮ ನಿಯಮಗಳು:"},
+    "rules_none": {
+        "en": "There are no rules yet. Tell me what to watch, for example: tell me if Papa leaves the bed "
+              "at night and isn't back in 10 minutes.",
+        "hi": "अभी कोई नियम नहीं है। बताइए किस पर नज़र रखूँ, जैसे: पापा रात को बिस्तर से उठें और "
+              "10 मिनट में वापस न आएँ तो मुझे बताना।",
+        "kn": "ಇನ್ನೂ ಯಾವ ನಿಯಮವೂ ಇಲ್ಲ. ಯಾವುದರ ಮೇಲೆ ಗಮನ ಇಡಬೇಕು ಎಂದು ಹೇಳಿ, ಉದಾಹರಣೆಗೆ: ಅಪ್ಪ ರಾತ್ರಿ ಹಾಸಿಗೆ "
+              "ಬಿಟ್ಟು 10 ನಿಮಿಷದಲ್ಲಿ ವಾಪಸ್ ಬರದಿದ್ದರೆ ತಿಳಿಸು.",
+    },
+    "rules_help": {
+        "en": "To change one, send: pause {n}, resume {n} or delete {n}.",
+        "hi": "बदलने के लिए भेजें: pause {n}, resume {n} या delete {n}।",
+        "kn": "ಬದಲಾಯಿಸಲು ಕಳುಹಿಸಿ: pause {n}, resume {n} ಅಥವಾ delete {n}.",
+    },
+    "rule_on": {"en": "▶️ on", "hi": "▶️ चालू", "kn": "▶️ ಚಾಲೂ"},
+    "rule_off": {"en": "⏸ paused", "hi": "⏸ रुका हुआ", "kn": "⏸ ನಿಲ್ಲಿಸಲಾಗಿದೆ"},
+    "rule_paused": {
+        "en": "⏸ Rule {n} is paused. Send \"resume {n}\" to turn it back on.",
+        "hi": "⏸ नियम {n} रोक दिया गया है। फिर से चालू करने के लिए \"resume {n}\" भेजें।",
+        "kn": "⏸ ನಿಯಮ {n} ನಿಲ್ಲಿಸಲಾಗಿದೆ. ಮತ್ತೆ ಚಾಲೂ ಮಾಡಲು \"resume {n}\" ಕಳುಹಿಸಿ.",
+    },
+    "rule_resumed": {
+        "en": "▶️ Rule {n} is on again: {summary}",
+        "hi": "▶️ नियम {n} फिर से चालू: {summary}",
+        "kn": "▶️ ನಿಯಮ {n} ಮತ್ತೆ ಚಾಲೂ: {summary}",
+    },
+    "rule_deleted": {
+        "en": "🗑 Rule {n} is deleted.",
+        "hi": "🗑 नियम {n} हटा दिया गया है।",
+        "kn": "🗑 ನಿಯಮ {n} ಅಳಿಸಲಾಗಿದೆ.",
+    },
+    "rule_already_on": {"en": "Rule {n} is already on.", "hi": "नियम {n} पहले से चालू है।",
+                        "kn": "ನಿಯಮ {n} ಈಗಾಗಲೇ ಚಾಲೂ ಇದೆ."},
+    "rule_already_paused": {"en": "Rule {n} is already paused.", "hi": "नियम {n} पहले से रुका हुआ है।",
+                            "kn": "ನಿಯಮ {n} ಈಗಾಗಲೇ ನಿಲ್ಲಿಸಲಾಗಿದೆ."},
+    "rule_unknown": {
+        "en": "I don't have a rule {n}. Send \"rules\" to see them.",
+        "hi": "नियम {n} मेरे पास नहीं है। सभी नियम देखने के लिए \"rules\" भेजें।",
+        "kn": "ನಿಯಮ {n} ನನ್ನ ಬಳಿ ಇಲ್ಲ. ಎಲ್ಲ ನಿಯಮಗಳನ್ನು ನೋಡಲು \"rules\" ಕಳುಹಿಸಿ.",
+    },
+    "rule_no_zone": {
+        "en": "I no longer have the outlined photo for rule {n}, so I can't watch it. Send the rule again "
+              "and I'll make a new one.",
+        "hi": "नियम {n} की घेरे वाली फ़ोटो अब मेरे पास नहीं है, इसलिए मैं उस पर नज़र नहीं रख सकता। "
+              "नियम दोबारा भेजें, मैं नया बना दूँगा।",
+        "kn": "ನಿಯಮ {n}ರ ಗುರುತು ಹಾಕಿದ ಫೋಟೋ ಈಗ ನನ್ನ ಬಳಿ ಇಲ್ಲ, ಹಾಗಾಗಿ ಗಮನಿಸಲಾರೆ. ನಿಯಮವನ್ನು ಮತ್ತೆ "
+              "ಕಳುಹಿಸಿ, ಹೊಸದು ಮಾಡುತ್ತೇನೆ.",
+    },
     "camera_view": {
         "en": "This is what the camera sees right now.",
         "hi": "कैमरे में अभी यह दिख रहा है।",

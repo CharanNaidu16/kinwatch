@@ -63,6 +63,39 @@ def is_no(message: str) -> bool:
     return len(w) > 0 and w[0] in NO_WORDS
 
 
+CLAIM_PHRASES = ("got it", "on it", "dekh lunga", "dekh lungi", "dekh leta", "dekh leti", "dekh raha", "dekh rahi",
+                 "देख लूँगा", "देख लूंगा", "देख लूँगी", "देख लूंगी", "देख लेता", "देख लेती", "देख रहा", "देख रही",
+                 "ನೋಡ್ತೀನಿ", "ನೋಡುತ್ತೇನೆ", "nodtini", "nodteeni")
+
+
+def is_claim(message: str) -> bool:
+    """A typed "I've got it" in place of the button. Short messages only, so a rule never matches."""
+    w = _words(message)
+    joined = f" {' '.join(w)} "
+    return 0 < len(w) <= 5 and any(f" {p} " in joined for p in CLAIM_PHRASES)
+
+
+LIST_WORDS = {"rules", "rule", "list", "niyam", "नियम", "ನಿಯಮ", "ನಿಯಮಗಳು"}
+COMMAND_WORDS = {
+    "pause": {"pause", "stop", "band", "roko", "बंद", "रोको", "ನಿಲ್ಲಿಸು"},
+    "resume": {"resume", "start", "unpause", "chalu", "चालू", "शुरू", "ಚಾಲೂ", "ಶುರು"},
+    "delete": {"delete", "remove", "hatao", "हटाओ", "ಅಳಿಸು"},
+}
+
+
+def rule_command(message: str) -> tuple[str, int | None] | None:
+    """'rules' -> ('list', None); 'pause 3' / '3 pause' / 'नियम 3 बंद' -> ('pause', 3). No AI involved."""
+    w = _words(message)
+    if len(w) == 1 and w[0] in LIST_WORDS:
+        return ("list", None)
+    w = [x for x in w if x not in LIST_WORDS]  # "rule 3 pause", "नियम 3 बंद"
+    numbers = [x for x in w if x.isdigit()]
+    verbs = [action for x in w for action, vocab in COMMAND_WORDS.items() if x in vocab]
+    if len(w) == 2 and len(numbers) == 1 and len(verbs) == 1:
+        return (verbs[0], int(numbers[0]))
+    return None
+
+
 VIEW_WORDS = {"check", "camera", "photo", "picture", "snapshot", "view", "dikhao", "दिखाओ", "कैमरा", "ತೋರಿಸು", "ಕ್ಯಾಮೆರಾ"}
 VIEW_PHRASES = ("can you see", "can u see", "what do you see", "what can you see", "kya dikh", "क्या दिख")
 
@@ -229,6 +262,10 @@ class Router:
     async def _message(self, message: str, kind: Literal["text", "voice"], member: Member, conv: Conversation) -> None:
         if wants_camera_view(message):
             return await self._camera_view(member, self._language(message))
+        if is_claim(message) and self.alerts is not None and (alert_id := self.alerts.latest_for(member)):
+            return await self.alerts.claim(alert_id, member)
+        if command := rule_command(message):
+            return await self._rule_command(*command, member, self._language(message))
         if conv.state == "awaiting_confirmation":
             return await self._confirmation_reply(message, member, conv)
         if conv.state == "awaiting_clarification":
@@ -246,6 +283,59 @@ class Router:
         if frame.height > frame.width:
             caption += text("camera_view_upright", lang)
         await self.send(member, "info", caption, jpeg=frame.jpeg)
+
+    # --- rule commands: rules / pause N / resume N / delete N ---------------------------------------
+
+    async def _rule_command(self, action: str, number: int | None, member: Member, lang: Language) -> None:
+        if action == "list":
+            return await self._list_rules(member, lang)
+        rule = self.storage.get_rule(number) if number is not None else None
+        if (rule is None or rule.household_id != self.household_id
+                or rule.status not in (RuleStatus.ARMED, RuleStatus.PAUSED)):
+            return await self.send(member, "info", text("rule_unknown", lang, n=str(number)))
+        n, now = str(rule.id), self.clock.now()
+        if action == "pause":
+            if rule.status == RuleStatus.PAUSED:
+                return await self.send(member, "info", text("rule_already_paused", lang, n=n))
+            self.storage.execute("UPDATE rules SET status = 'paused' WHERE id = ?", (rule.id,))
+            self.storage.add_timeline(self.household_id, now, "rule_paused", f"Rule {n} paused by {member.name}",
+                                      rule_id=rule.id)
+            reply = text("rule_paused", lang, n=n)
+        elif action == "resume":
+            if rule.status == RuleStatus.ARMED:
+                return await self.send(member, "info", text("rule_already_on", lang, n=n))
+            if not load_candidates(self.settings.data_path, rule.id):
+                return await self.send(member, "info", text("rule_no_zone", lang, n=n))
+            # A fresh start: a timer left over from before the pause must not fire the moment it's back.
+            self.storage.execute("DELETE FROM rule_state WHERE rule_id = ?", (rule.id,))
+            self.storage.execute("UPDATE rules SET status = 'armed', armed_at = ? WHERE id = ?", (now, rule.id))
+            self.storage.add_timeline(self.household_id, now, "rule_resumed", f"Rule {n} resumed by {member.name}",
+                                      rule_id=rule.id)
+            names = self._names(rule, self.storage.members(self.household_id))
+            reply = text("rule_resumed", lang, n=n, summary=templates.summary(rule, names))
+        else:
+            self.storage.execute("UPDATE rules SET status = 'deleted' WHERE id = ?", (rule.id,))
+            self.storage.execute("DELETE FROM rule_state WHERE rule_id = ?", (rule.id,))
+            self.storage.add_timeline(self.household_id, now, "rule_deleted", f"Rule {n} deleted by {member.name}",
+                                      rule_id=rule.id)
+            reply = text("rule_deleted", lang, n=n)
+        if self.watcher is not None:
+            self.watcher.reload()
+        await self.send(member, "info", reply)
+
+    async def _list_rules(self, member: Member, lang: Language) -> None:
+        rows = self.storage.query("SELECT id FROM rules WHERE household_id = ? AND status IN ('armed', 'paused')"
+                                  " ORDER BY id", (self.household_id,))
+        rules = [r for r in (self.storage.get_rule(row["id"]) for row in rows) if r is not None]
+        if not rules:
+            return await self.send(member, "info", text("rules_none", lang))
+        members = self.storage.members(self.household_id)
+        lines = [text("rules_header", lang)]
+        for rule in rules:
+            state = text("rule_on" if rule.status == RuleStatus.ARMED else "rule_off", lang)
+            lines.append(f"{rule.id} · {state} · {templates.summary(rule, self._names(rule, members))}")
+        lines.append(text("rules_help", lang, n=str(rules[0].id)))
+        await self.send(member, "info", "\n".join(lines))
 
     async def _confirmation_reply(self, message: str, member: Member, conv: Conversation) -> None:
         rule = self.storage.get_rule(conv.rule_id) if conv.rule_id else None
