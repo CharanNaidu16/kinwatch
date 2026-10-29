@@ -42,6 +42,7 @@ class Runtime:
     guard_ts: float | None = None
     last_held_false: Frame | None = None  # last frame where the condition did NOT hold (evidence)
     pending_frame: Frame | None = None
+    last_count: int | None = None  # subjects in/on/near the zone at the last analysis (behind-the-scenes page)
 
     @property
     def subject_concept(self) -> str:
@@ -68,6 +69,7 @@ class Watcher:
     _detectors: dict[str, ChangeDetector] = field(default_factory=dict)
     _tasks: set[asyncio.Task] = field(default_factory=set)
     _started: float | None = None
+    last_seen: dict[str, tuple[float, list[Instance] | None]] = field(default_factory=dict)  # concept -> latest SAM result
     _camera_lost: bool = False
 
     # --- rules ------------------------------------------------------------------------------------
@@ -180,6 +182,7 @@ class Watcher:
         try:
             self._detectors.setdefault(concept, ChangeDetector()).mark_analysed(frame)
             instances = await self._segment(concept, frame)
+            self.last_seen[concept] = (frame.ts, instances)
             for rt in list(self.runtimes.values()):
                 if rt.engine.phase == Phase.OUT_OF_WINDOW:
                     continue
@@ -188,6 +191,7 @@ class Watcher:
                     rt.guard_ts = frame.ts
                 if concept == rt.subject_concept:
                     reading = self._reading(rt, instances, frame)
+                    rt.last_count = reading.count
                     transitions = rt.engine.observe(frame.ts, reading)
                     if rt.engine.observation(reading) == Observation.FALSE:
                         rt.last_held_false = frame

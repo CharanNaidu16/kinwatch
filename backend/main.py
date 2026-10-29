@@ -10,9 +10,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse, Response
 
-from backend import templates
+from backend import bts, templates
 from backend.alerts import Alerts
 from backend.budget import Budget
 from backend.clock import Clock, SystemClock, local_hhmm
@@ -28,6 +28,8 @@ from backend.vision import ChangeDetector, FrameBuffer, FrameError, load_frame
 from backend.watcher import Watcher
 
 PHONE_PAGE = Path(__file__).resolve().parent.parent / "phone" / "index.html"
+BTS_PAGE = Path(__file__).resolve().parent.parent / "web" / "bts" / "index.html"
+BTS_COOKIE = "kinwatch_bts"
 DEFAULT_TOKENS = {"change-me-device", "change-me-bts"}
 TICK_SEC = 2.0  # timers advance even when no frames arrive (camera offline still ends a window)
 
@@ -111,9 +113,35 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None, sto
     app = FastAPI(title="Kinwatch", lifespan=lifespan, docs_url=None, redoc_url=None)
 
     def require_bts_token(request: Request) -> None:
-        given = request.headers.get("X-BTS-Token") or request.query_params.get("t") or ""
+        given = (request.headers.get("X-BTS-Token") or request.query_params.get("t")
+                 or request.cookies.get(BTS_COOKIE) or "")
         if not _token_ok(given, settings.bts_token.get_secret_value()):
             raise HTTPException(status_code=401, detail="bad or missing token")
+
+    @app.get("/bts", include_in_schema=False)
+    async def bts_page(request: Request) -> Response:
+        """Behind-the-scenes page. /bts?t=<BTS_TOKEN> swaps the token for a cookie and drops it from the URL."""
+        if "t" in request.query_params:
+            require_bts_token(request)
+            response = RedirectResponse("/bts", status_code=303)
+            response.set_cookie(BTS_COOKIE, request.query_params["t"], httponly=True, samesite="strict",
+                                max_age=7 * 24 * 3600)
+            return response
+        require_bts_token(request)
+        return FileResponse(BTS_PAGE, media_type="text/html", headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/bts/state")
+    async def bts_state(request: Request) -> dict:
+        require_bts_token(request)
+        return bts.state(request.app.state)
+
+    @app.get("/api/bts/frame.jpg", include_in_schema=False)
+    async def bts_frame(request: Request) -> Response:
+        require_bts_token(request)
+        jpeg = await bts.frame(request.app.state)
+        if jpeg is None:
+            return Response(status_code=204)
+        return Response(jpeg, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
 
     @app.get("/healthz")
     async def healthz(request: Request) -> dict:

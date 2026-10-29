@@ -153,7 +153,7 @@ def _wait_http(url: str, timeout: float) -> bool:
     return False
 
 
-async def _send_camera_link(settings: Settings, link: str) -> str:
+async def _send_camera_link(settings: Settings, link: str, bts: str) -> str:
     from backend.household import ensure_household
     from backend.messaging import build_messenger
     from backend.storage import Storage
@@ -166,7 +166,8 @@ async def _send_camera_link(settings: Settings, link: str) -> str:
         if not admins:
             return f"No {settings.messenger} admin in FAMILY_MEMBERS_JSON, so the camera link wasn't sent."
         ref = await build_messenger(settings).send_text(
-            admins[0], f"Kinwatch camera link (open it on the camera phone):\n{link}")
+            admins[0], f"Kinwatch camera link (open it on the camera phone):\n{link}\n\n"
+                       f"Behind the scenes (open on a laptop):\n{bts}")
         # Recorded like any other message, so its delivery status shows up in the app's log.
         storage.execute("INSERT INTO deliveries (member_id, kind, provider_msg_id, sent_at) VALUES (?, 'info', ?, ?)",
                         (admins[0].id, ref.provider_msg_id, time.time()))
@@ -215,17 +216,18 @@ def main() -> None:
             sys.exit("The tunnel URL isn't reachable yet; try running the script again.")
 
         camera = f"{public}/phone?d={settings.device_token.get_secret_value()}"
+        bts = f"{public}/bts?t={settings.bts_token.get_secret_value()}"
         if settings.messenger in ("whatsapp", "telegram"):
             async def setup() -> list[str]:
                 configure = whatsapp_setup if settings.messenger == "whatsapp" else telegram_setup
                 async with httpx.AsyncClient(timeout=20) as http:
                     lines = await configure(settings, public, http)
-                return [*lines, await _send_camera_link(settings, camera)]
+                return [*lines, await _send_camera_link(settings, camera, bts)]
             for line in asyncio.run(setup()):
                 print(line)
         print()
         print(f"Camera link (open on the camera phone): {camera}")
-        print(f"Budget: {public}/api/budget  (needs the BTS token)")
+        print(f"Behind the scenes: {bts}")
         print("Running. Press Ctrl+C to stop.")
         while all(p.poll() is None for p in procs):
             time.sleep(1)

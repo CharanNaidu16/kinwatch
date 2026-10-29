@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Kinwatch · behind the scenes</title>
+<style>
+  :root {
+    --bg:#0f1214; --panel:#171b1f; --line:#262c32; --fg:#eef1f3; --muted:#98a2ab;
+    --spark:#a78bfa; --sam:#34d399; --voice:#fbbf24; --engine:#93a3b3; --bad:#f87171; --ok:#34d399; --warn:#fbbf24;
+    --code:#0b0e10;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f5f6f7; --panel:#fff; --line:#e3e6e9; --fg:#14181b; --muted:#5d6872;
+      --spark:#7c3aed; --sam:#059669; --voice:#b45309; --engine:#52606d; --bad:#dc2626; --ok:#059669; --warn:#b45309;
+      --code:#f3f4f6; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+    font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans","Noto Sans Devanagari","Noto Sans Kannada",sans-serif; }
+  header { display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid var(--line); }
+  header h1 { font-size:17px; margin:0 8px 0 0; }
+  .pill { display:inline-flex; align-items:center; gap:6px; padding:3px 10px; border-radius:999px; border:1px solid var(--line);
+    font-size:12px; color:var(--muted); white-space:nowrap; }
+  .pill b { color:var(--fg); font-weight:600; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--muted); }
+  .dot.ok { background:var(--ok); } .dot.bad { background:var(--bad); } .dot.warn { background:var(--warn); }
+  main { display:grid; gap:14px; padding:14px 16px 28px; grid-template-columns:minmax(0,1.05fr) minmax(0,1fr); max-width:1400px; margin:0 auto; }
+  @media (max-width: 900px) { main { grid-template-columns:minmax(0,1fr); } }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; min-width:0; }
+  section h2 { font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:0 0 10px; font-weight:600; }
+  #frameBox { position:relative; background:#000; border-radius:8px; overflow:hidden; aspect-ratio:4/3; display:grid; place-items:center; }
+  #frame { width:100%; height:100%; object-fit:contain; display:none; }
+  #noFrame { color:#8b949e; font-size:13px; }
+  .legend { display:flex; gap:14px; margin-top:8px; font-size:12px; color:var(--muted); flex-wrap:wrap; }
+  .sw { display:inline-block; width:12px; height:3px; vertical-align:middle; margin-right:5px; }
+  .chip { display:inline-block; font-size:11px; font-weight:600; padding:1px 7px; border-radius:6px; border:1px solid currentColor; margin-right:4px; white-space:nowrap; }
+  .m-spark { color:var(--spark); } .m-sam { color:var(--sam); } .m-voice { color:var(--voice); } .m-engine, .m-template { color:var(--engine); }
+  .rule { border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:12px; }
+  .rule:last-child { margin-bottom:0; }
+  .rule-head { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:10px; }
+  .rule-head strong { font-size:15px; }
+  .status { font-size:12px; padding:1px 8px; border-radius:999px; background:var(--code); color:var(--muted); }
+  .status.armed { color:var(--ok); } .status.paused { color:var(--warn); }
+  .steps { display:grid; gap:8px; }
+  .step { display:grid; grid-template-columns:22px minmax(0,1fr); gap:8px; }
+  .num { width:22px; height:22px; border-radius:50%; background:var(--code); color:var(--muted); font-size:12px; display:grid; place-items:center; }
+  .step p { margin:0 0 4px; }
+  .quote { font-size:15px; }
+  pre { margin:4px 0 0; background:var(--code); border-radius:8px; padding:8px 10px; font:12px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;
+    overflow:auto; max-height:220px; white-space:pre-wrap; word-break:break-word; }
+  details summary { cursor:pointer; color:var(--muted); font-size:12px; margin-top:4px; }
+  .bar { height:8px; background:var(--code); border-radius:999px; overflow:hidden; margin-top:6px; }
+  .bar i { display:block; height:100%; background:var(--warn); width:0; transition:width .4s; }
+  .muted { color:var(--muted); }
+  .tl { list-style:none; margin:0; padding:0; max-height:520px; overflow:auto; }
+  .tl li { display:grid; grid-template-columns:62px minmax(0,1fr); gap:8px; padding:6px 0; border-bottom:1px solid var(--line); }
+  .tl li:last-child { border-bottom:0; }
+  .tl time { color:var(--muted); font:12px ui-monospace,Consolas,monospace; padding-top:1px; }
+  .tl .ans { color:var(--muted); font-size:13px; margin-top:2px; }
+  .alert { border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:10px; }
+  .alert:last-child { margin-bottom:0; }
+  .alert .who { color:var(--muted); font-size:12px; margin-top:4px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  td, th { text-align:left; padding:5px 4px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:600; font-size:12px; }
+  td.n { text-align:right; font-variant-numeric:tabular-nums; }
+  .big { font-size:26px; font-weight:700; }
+  .row { display:flex; gap:18px; align-items:baseline; flex-wrap:wrap; margin-bottom:10px; }
+  .stack { display:grid; gap:14px; align-content:start; min-width:0; }
+  .empty { color:var(--muted); font-size:13px; }
+  #err { display:none; color:var(--bad); padding:8px 16px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Kinwatch · behind the scenes</h1>
+  <span class="pill"><span class="dot" id="camDot"></span><span id="camText">camera</span></span>
+  <span class="pill">models <b id="modeText">…</b></span>
+  <span class="pill" id="demoPill" hidden>demo mode <b id="demoText"></b></span>
+  <span class="pill">family <b id="familyText">…</b></span>
+  <span class="pill">spent <b id="spentText">…</b></span>
+</header>
+<p id="err"></p>
+<main>
+  <div class="stack">
+    <section>
+      <h2>What the camera sees now</h2>
+      <div id="frameBox"><img id="frame" alt="Latest camera frame"><span id="noFrame">No camera connected</span></div>
+      <div class="legend">
+        <span><span class="sw" style="background:#22c55e"></span>zone being watched (SAM 3.1, outlined once when the rule was set)</span>
+        <span><span class="sw" style="background:#3b82f6"></span>people SAM 3.1 found in the last few seconds</span>
+      </div>
+    </section>
+    <section>
+      <h2>Timeline</h2>
+      <ul class="tl" id="timeline"></ul>
+    </section>
+  </div>
+  <div class="stack">
+    <section>
+      <h2>Rules: from a sentence to what runs</h2>
+      <div id="rules"></div>
+    </section>
+    <section>
+      <h2>Alerts and who handled them</h2>
+      <div id="alerts"></div>
+    </section>
+    <section>
+      <h2>Meta API use</h2>
+      <div class="row"><span class="big" id="total">$0</span><span class="muted" id="today"></span></div>
+      <table><thead><tr><th>Model</th><th>Used for</th><th class="n">Calls</th><th class="n">Cost</th></tr></thead>
+        <tbody id="budget"></tbody></table>
+      <p class="muted" id="caps" style="margin:8px 0 0;font-size:12px"></p>
+    </section>
+  </div>
+</main>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const MODEL_CLASS = {"Muse Spark":"m-spark", "SAM 3.1":"m-sam", "Voice Transcribe":"m-voice", "engine":"m-engine", "template":"m-template"};
+const MODEL_NAMES = {"muse-spark-1.3":"Muse Spark", "sam-3.1":"SAM 3.1", "muse-voice-transcribe-1.0":"Voice Transcribe"};
+const PURPOSE = {parse_rule:"sentence → rule", resolve_correction:"\"no, the other one\"", confirm_event:"checking alert frames",
+  write_alert:"writing alerts", parse_question:"reading questions", segment_zone:"outlining the zone", watch:"watching",
+  question:"answering questions", transcribe:"voice notes"};
+const PHASE = {OUT_OF_WINDOW:"outside its time window", WAITING_BASELINE:"learning who is there", WATCHING:"watching",
+  PENDING:"condition holds, timer running", FIRED:"alert sent"};
+const chip = (m) => `<span class="chip ${MODEL_CLASS[m] || "m-engine"}">${esc(m)}</span>`;
+const secs = (s) => s >= 90 ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}` : `${Math.round(s)} s`;
+const pretty = (o) => esc(JSON.stringify(o, null, 2));
+
+function renderRules(rules) {
+  if (!rules.length) { $("rules").innerHTML = '<p class="empty">No rules yet. Send one in the family chat.</p>'; return; }
+  $("rules").innerHTML = rules.map((r) => {
+    const e = r.engine;
+    const heard = r.input_kind === "voice"
+      ? `<p>${chip("Voice Transcribe")} heard a voice note</p><p class="quote">“${esc(r.transcript || r.original_text)}”</p>`
+      : `<p class="muted">Typed in the chat</p><p class="quote">“${esc(r.original_text)}”</p>`;
+    let engine = '<p class="muted">Not running (paused or waiting for “yes”).</p>';
+    if (e) {
+      const count = e.count === null || e.count === undefined ? "not seen yet" : `${e.count} in the zone`;
+      engine = `<p>${chip("engine")} ${esc(PHASE[e.phase] || e.phase)} · ${esc(count)}${e.baseline ? ` · baseline ${e.baseline}` : ""}</p>`;
+      if (e.elapsed_sec !== null && e.elapsed_sec !== undefined) {
+        const pct = Math.min(100, 100 * e.elapsed_sec / Math.max(e.duration_sec, 1));
+        engine += `<div class="bar"><i style="width:${pct}%"></i></div>
+          <p class="muted">${secs(e.elapsed_sec)} of ${secs(e.duration_sec)} since ${esc(e.since)}</p>`;
+      }
+      if (!e.has_zone) engine += '<p class="muted">No stored zone: this rule is not watched.</p>';
+    }
+    return `<div class="rule">
+      <div class="rule-head"><strong>Rule ${r.id}</strong><span class="status ${esc(r.status)}">${esc(r.status.replace("_", " "))}</span>
+        <span class="muted">by ${esc(r.created_by || "?")} at ${esc(r.created_at || "")}</span></div>
+      <div class="steps">
+        <div class="step"><span class="num">1</span><div>${heard}</div></div>
+        <div class="step"><span class="num">2</span><div><p>${chip("Muse Spark")} turned it into a rule (schema-constrained JSON), then code checked it</p>
+          <pre>${pretty(r.rule_json)}</pre>
+          ${r.spark_output ? `<details><summary>Muse Spark's raw output</summary><pre>${pretty(r.spark_output)}</pre></details>` : ""}
+          <p class="muted" style="margin-top:6px">${esc(r.summary)}</p></div></div>
+        <div class="step"><span class="num">3</span><div><p>${chip("SAM 3.1")} outlined “${esc(r.sam_concept)}” on the camera photo${r.zone_instance ? ` (instance ${r.zone_instance})` : ""}; the family confirmed it</p></div></div>
+        <div class="step"><span class="num">4</span><div>${engine}</div></div>
+      </div></div>`;
+  }).join("");
+}
+
+function renderTimeline(items) {
+  if (!items.length) { $("timeline").innerHTML = '<li><span></span><span class="empty">Nothing yet.</span></li>'; return; }
+  $("timeline").innerHTML = items.map((t) => `<li><time>${esc(t.time)}</time><div>
+      ${t.models.map(chip).join("")} ${esc(t.text)}
+      ${t.detail.answer ? `<div class="ans">→ ${esc(t.detail.answer)}</div>` : ""}
+      ${t.detail.writer === "template" && t.detail.reason ? `<div class="ans">template used: ${esc(t.detail.reason)}</div>` : ""}
+    </div></li>`).join("");
+}
+
+function renderAlerts(alerts) {
+  if (!alerts.length) { $("alerts").innerHTML = '<p class="empty">No alerts yet.</p>'; return; }
+  $("alerts").innerHTML = alerts.map((a) => {
+    const state = a.status === "claimed" ? `<span class="status armed">claimed by ${esc(a.claimed_by)}</span>`
+      : a.status === "expired" ? '<span class="status paused">nobody claimed it</span>'
+      : `<span class="status paused">open · step ${a.level}</span>`;
+    const check = a.check && a.check.visible_summary
+      ? `<div class="who">${chip("Muse Spark")} checked the frames: ${a.check.consistent ? "consistent" : "not consistent"} (${esc(a.check.confidence)}) · “${esc(a.check.visible_summary)}”</div>` : "";
+    return `<div class="alert"><div>${state} <span class="muted">${esc(a.at)}</span></div>
+      <div style="margin-top:6px">${esc(a.text)}</div>
+      <div class="who">sent to ${esc(a.sent_to.join(" → ") || "nobody")}</div>${check}</div>`;
+  }).join("");
+}
+
+function renderBudget(b) {
+  $("total").textContent = "$" + b.total_usd.toFixed(3);
+  $("today").textContent = `today $${b.today_usd.toFixed(3)} · cap $${b.caps.daily_usd}/day, $${b.caps.total_usd} total`;
+  $("spentText").textContent = "$" + b.total_usd.toFixed(3);
+  $("budget").innerHTML = b.by_purpose.length ? b.by_purpose.map((p) => {
+    const m = MODEL_NAMES[p.model] || p.model;
+    return `<tr><td>${chip(m)}</td><td>${esc(PURPOSE[p.purpose] || p.purpose)}</td><td class="n">${p.calls}</td><td class="n">$${p.usd.toFixed(4)}</td></tr>`;
+  }).join("") : '<tr><td colspan="4" class="empty">No live calls yet.</td></tr>';
+  $("caps").textContent = `Hard caps: SAM ${b.caps.sam_per_hour}/hour, Spark ${b.caps.spark_per_hour}/hour; $${b.caps.alert_reserve_usd} kept for alerts.`
+    + (b.kill_switch ? " Kill switch is ON." : "");
+}
+
+function renderHeader(s) {
+  const c = s.camera;
+  $("camDot").className = "dot " + (c.connected ? (c.dark ? "warn" : "ok") : "bad");
+  $("camText").textContent = c.connected ? `camera live · ${c.size}${c.dark ? " · too dark" : ""}`
+    : c.last_frame_sec ? `camera quiet for ${secs(c.last_frame_sec)}` : "no camera yet";
+  $("modeText").textContent = s.mode.adapters === "live" ? "LIVE" : "MOCK";
+  $("demoPill").hidden = !s.mode.demo_mode;
+  $("demoText").textContent = (s.mode.time_scale !== 1 ? `time ×${s.mode.time_scale} · ` : "")
+    + `claim timeout ${s.mode.claim_timeout_sec} s`;
+  $("familyText").textContent = s.family.join(", ");
+}
+
+async function refreshState() {
+  try {
+    const res = await fetch("/api/bts/state", {cache: "no-store", credentials: "same-origin"});
+    if (res.status === 401) { $("err").textContent = "Open the behind-the-scenes link Kinwatch sent you (it carries the access token)."; $("err").style.display = "block"; return; }
+    const s = await res.json();
+    $("err").style.display = "none";
+    renderHeader(s); renderRules(s.rules); renderTimeline(s.timeline); renderAlerts(s.alerts); renderBudget(s.budget);
+  } catch (e) {
+    $("err").textContent = "Can't reach Kinwatch right now; retrying."; $("err").style.display = "block";
+  }
+}
+
+let frameUrl = null;
+async function refreshFrame() {
+  try {
+    const res = await fetch("/api/bts/frame.jpg", {cache: "no-store", credentials: "same-origin"});
+    if (res.status !== 200) { $("frame").style.display = "none"; $("noFrame").style.display = "block"; return; }
+    const url = URL.createObjectURL(await res.blob());
+    $("frame").src = url; $("frame").style.display = "block"; $("noFrame").style.display = "none";
+    if (frameUrl) URL.revokeObjectURL(frameUrl);
+    frameUrl = url;
+  } catch (e) { /* keep the last picture */ }
+}
+
+refreshState(); refreshFrame();
+setInterval(refreshState, 2000);
+setInterval(refreshFrame, 2000);
+</script>
+</body>
+</html>
