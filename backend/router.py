@@ -16,12 +16,13 @@ from typing import Literal
 
 from backend import templates
 from backend.budget import BudgetExceeded
-from backend.clock import Clock
+from backend.clock import Clock, local_hhmm
 from backend.config import Settings
 from backend.media import AudioError, voice_to_wav
 from backend.messaging.base import Button, Inbound, Messenger, StatusUpdate
 from backend.models import Adapters
 from backend.models.mock_spark import detect_language
+from backend.questions import look, sentence
 from backend.rules import validate_parsed
 from backend.schemas import Language, Member, Rule, RuleStatus
 from backend.storage import Storage
@@ -73,6 +74,27 @@ def is_claim(message: str) -> bool:
     w = _words(message)
     joined = f" {' '.join(w)} "
     return 0 < len(w) <= 5 and any(f" {p} " in joined for p in CLAIM_PHRASES)
+
+
+MAX_QUESTION_WORDS = 15
+QUESTION_STARTS = {"is", "are", "was", "does", "do", "has", "have", "can", "where", "who", "anyone", "anybody",
+                   "kya", "क्या", "kahan", "कहाँ", "कहां", "koi", "कोई", "ಎಲ್ಲಿ", "ಯಾರಾದರೂ", "ಯಾರು"}
+RULE_WORDS = {"if", "when", "whenever", "agar", "अगर", "jab", "जब", "ಆದರೆ"}
+RULE_PHRASES = ("tell me", "let me know", "alert", "notify", "inform", "remind", "batana", "bata dena", "बताना",
+                "बताओ", "बता देना", "ತಿಳಿಸು", "ಹೇಳು")
+
+
+def is_question(message: str) -> bool:
+    """A question about right now, not a rule ("tell me if…") in question form. Spark gets the final say."""
+    w = _words(message)
+    if not 0 < len(w) <= MAX_QUESTION_WORDS:
+        return False
+    joined = f" {' '.join(w)} "
+    kannada_if = any(x.endswith("ರೆ") for x in w)  # ಬಂದ್ರೆ / ಬಂದರೆ: "if … comes"
+    if set(w) & RULE_WORDS or kannada_if or any(f" {p} " in joined for p in RULE_PHRASES):
+        return False
+    kannada_yes_no = w[-1].endswith("ಾ") and any("ಀ" <= ch <= "೿" for ch in w[-1])  # ಇದ್ದಾರಾ, ಇದೆಯಾ
+    return message.strip().endswith("?") or w[0] in QUESTION_STARTS or kannada_yes_no
 
 
 LIST_WORDS = {"rules", "rule", "list", "niyam", "नियम", "ನಿಯಮ", "ನಿಯಮಗಳು"}
@@ -273,7 +295,37 @@ class Router:
             return await self._new_rule(combined, conv.data.get("kind", kind), member,
                                         rounds=int(conv.data.get("rounds", 0)) + 1,
                                         transcript=conv.data.get("transcript") or (message if kind == "voice" else None))
+        if is_question(message):
+            return await self._question(message, kind, member)
         await self._new_rule(message, kind, member, rounds=0, transcript=message if kind == "voice" else None)
+
+    async def _question(self, message: str, kind: Literal["text", "voice"], member: Member) -> None:
+        """Ask the camera: one Spark read of the question, then SAM on the latest frame (see questions.py)."""
+        lang = self._language(message)
+        frame = self.frames.latest(self.clock.now(), FRESH_FRAME_SEC) if self.frames is not None else None
+        if frame is None:
+            return await self.send(member, "info", text("camera_offline", lang))
+        q = await self.adapters.spark.parse_question(message)
+        if q.kind == "rule":  # "can you tell me if…": a rule after all
+            return await self._new_rule(message, kind, member, rounds=0,
+                                        transcript=message if kind == "voice" else None)
+        now = self.clock.now()
+        record = {"question": message, "parsed": {"kind": q.kind, "subject": q.subject.value, "zone": q.zone_object,
+                                                  "relation": q.relation, "language": q.language}}
+        if q.kind == "unsupported":
+            reply, photo = text("question_unsupported", q.language), frame.jpeg
+        elif frame.dark:
+            reply, photo = text("too_dark_now", q.language), frame.jpeg
+        else:
+            answer = await look(q, frame, self.adapters.segmenter, self.settings)
+            record.update(answer.data, count=answer.count)
+            photo = answer.photo
+            reply = (sentence(q, answer.count, local_hhmm(frame.ts)) if answer.count is not None else
+                     text("zone_not_in_view", q.language, zone=templates.zone_word(q.zone_object or "", q.language)))
+        record["answer"] = reply
+        self.storage.add_timeline(self.household_id, now, "question_answered", f"{member.name} asked: {message}",
+                                  data=record)
+        await self.send(member, "info", reply, jpeg=photo)
 
     async def _camera_view(self, member: Member, lang: Language) -> None:
         frame = self.frames.latest(self.clock.now(), FRESH_FRAME_SEC) if self.frames is not None else None
@@ -401,7 +453,8 @@ class Router:
         if not found:
             self.reset(member.id)
             return await self.send(member, "info", text("zone_not_found", rule.language,
-                                                        zone=templates.zone_word(rule.zone_object, rule.language)))
+                                                        zone=templates.zone_word(rule.zone_object, rule.language)),
+                                   jpeg=frame.jpeg)
         found.sort(key=lambda i: i.box.x1)  # number them left to right
         rule = rule.model_copy(update={"status": RuleStatus.AWAITING_CONFIRMATION})
         rule_id = self.storage.insert_rule(rule, now)

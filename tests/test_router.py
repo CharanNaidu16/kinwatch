@@ -163,7 +163,9 @@ def test_no_camera_means_no_rule(client, storage):
 def test_zone_not_in_view(client, storage):
     camera(client, [(PERSON, (100, 100, 200, 300))])  # no bed anywhere
     post(client, wa.text(PRIYA, HINDI_RULE, "m1"))
-    assert outbox(client)[-1].text == "मुझे कैमरे में बिस्तर नहीं दिख रहा। फ़ोन को उसकी तरफ़ करें और मैसेज दोबारा भेजें।"
+    reply = outbox(client)[-1]
+    assert reply.text.startswith("मुझे कैमरे में बिस्तर नहीं दिख रहा (कैमरे में यह दिख रहा है)।")
+    assert reply.kind == "image"  # the family sees what the camera sees
 
 
 def test_two_beds_are_numbered_and_a_number_picks_one(client, storage):

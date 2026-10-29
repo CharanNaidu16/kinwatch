@@ -6,7 +6,7 @@ from typing import Literal, Protocol
 
 import numpy as np
 
-from backend.schemas import EventFacts, ParsedRule, Rule
+from backend.schemas import EventFacts, Language, ParsedRule, Rule, Subject
 
 
 @dataclass(frozen=True)
@@ -63,6 +63,18 @@ class TimedFrame:
 
 
 @dataclass(frozen=True)
+class Question:
+    """What a family member asked the camera about right now (Muse Spark, PLAN.md "ask the camera")."""
+
+    kind: Literal["question", "rule", "unsupported"]
+    subject: Subject
+    subject_name: str | None
+    zone_object: str | None
+    relation: Literal["in", "on", "near", "visible"]
+    language: Language
+
+
+@dataclass(frozen=True)
 class Verification:
     consistent: bool
     visible_summary: str
@@ -91,3 +103,5 @@ class Spark(Protocol):
         ...
 
     async def write_alert(self, facts: EventFacts) -> str: ...
+
+    async def parse_question(self, text: str) -> Question: ...

@@ -13,8 +13,8 @@ from pathlib import Path
 
 from backend import templates
 from backend.recorder import RECORDED, fill, scrub
-from backend.models.base import Correction, InstanceDesc, TimedFrame, Verification
-from backend.schemas import EventFacts, Language, ParsedRule, Rule
+from backend.models.base import Correction, InstanceDesc, Question, TimedFrame, Verification
+from backend.schemas import EventFacts, Language, ParsedRule, Rule, Subject
 
 FIXTURES = Path(__file__).resolve().parent.parent.parent / "fixtures" / "mock" / "spark_parse_rule.json"
 RECORDED_FIXTURES = RECORDED / "spark_parse_rule.json"
@@ -114,6 +114,25 @@ class MockSpark:
 
     async def confirm_event(self, frames: list[TimedFrame], statements: list[str]) -> Verification:
         return Verification(consistent=True, visible_summary="(mock) frames match the claim", confidence="high")
+
+    async def parse_question(self, text: str) -> Question:
+        lang = detect_language(text)
+        if _has(text, " ok", "okay", "fine", "theek", "ठीक", "तबीयत", "sick", "ಹುಷಾರ", "who is", "कौन"):
+            kind = "unsupported"
+        elif _has(text, "tell me", "बताना", "ತಿಳಿಸು"):
+            kind = "rule"
+        else:
+            kind = "question"
+        subject = (Subject.DOG if _has(text, "dog", "कुत्त", "ನಾಯಿ") else
+                   Subject.FLAME if _has(text, "stove", "flame", "चूल्हा", "गैस", "ಸ್ಟೌ", "ಒಲೆ") else Subject.PERSON)
+        zone = ("sofa" if _has(text, "sofa", "सोफ़", "सोफ", "ಸೋಫಾ") else
+                "bed" if _has(text, "bed", "बिस्तर", "ಹಾಸಿಗೆ") else
+                "gas stove" if subject == Subject.FLAME else
+                "main door" if _has(text, "door", "दरवाज", "ಬಾಗಿಲ") else None)
+        relation = ("near" if _has(text, "near", "पास", "ಹತ್ತಿರ") else
+                    "on" if _has(text, " on ", "पर", "ಮೇಲೆ") else "in") if zone else "visible"
+        name = next((w for w in text.split() if any(p in w.casefold() for p in ("papa", "पापा", "ಅಪ್ಪ", "appa"))), None)
+        return Question(kind=kind, subject=subject, subject_name=name, zone_object=zone, relation=relation, language=lang)
 
     async def write_alert(self, facts: EventFacts) -> str:
         return templates.alert(facts)

@@ -76,9 +76,12 @@ _TEXTS: dict[str, dict[Language, str]] = {
               "ನಂತರ ನಿಮ್ಮ ಮೆಸೇಜ್ ಮತ್ತೆ ಕಳುಹಿಸಿ.",
     },
     "zone_not_found": {
-        "en": "I can't see a {zone} in the camera view. Point the phone at it and send your message again.",
-        "hi": "मुझे कैमरे में {zone} नहीं दिख रहा। फ़ोन को उसकी तरफ़ करें और मैसेज दोबारा भेजें।",
-        "kn": "ಕ್ಯಾಮೆರಾದಲ್ಲಿ {zone} ಕಾಣುತ್ತಿಲ್ಲ. ಫೋನ್ ಅನ್ನು ಅದರ ಕಡೆ ತಿರುಗಿಸಿ ಮೆಸೇಜ್ ಮತ್ತೆ ಕಳುಹಿಸಿ.",
+        "en": "I can't see a {zone} in the camera view (this is what the camera sees). Point the phone at it, "
+              "or tap ↻ on the camera page if the picture is sideways, and send your message again.",
+        "hi": "मुझे कैमरे में {zone} नहीं दिख रहा (कैमरे में यह दिख रहा है)। फ़ोन को उसकी तरफ़ करें, या तस्वीर "
+              "टेढ़ी हो तो कैमरा पेज पर ↻ दबाएँ, और मैसेज दोबारा भेजें।",
+        "kn": "ಕ್ಯಾಮೆರಾದಲ್ಲಿ {zone} ಕಾಣುತ್ತಿಲ್ಲ (ಕ್ಯಾಮೆರಾಗೆ ಇದು ಕಾಣುತ್ತಿದೆ). ಫೋನ್ ಅನ್ನು ಅದರ ಕಡೆ ತಿರುಗಿಸಿ, "
+              "ಅಥವಾ ಚಿತ್ರ ಓರೆಯಾಗಿದ್ದರೆ ಕ್ಯಾಮೆರಾ ಪುಟದಲ್ಲಿ ↻ ಒತ್ತಿ, ನಂತರ ಮೆಸೇಜ್ ಮತ್ತೆ ಕಳುಹಿಸಿ.",
     },
     "pick_one": {
         "en": "Which one should I watch? Reply with its number.",
@@ -166,6 +169,24 @@ _TEXTS: dict[str, dict[Language, str]] = {
               "नियम दोबारा भेजें, मैं नया बना दूँगा।",
         "kn": "ನಿಯಮ {n}ರ ಗುರುತು ಹಾಕಿದ ಫೋಟೋ ಈಗ ನನ್ನ ಬಳಿ ಇಲ್ಲ, ಹಾಗಾಗಿ ಗಮನಿಸಲಾರೆ. ನಿಯಮವನ್ನು ಮತ್ತೆ "
               "ಕಳುಹಿಸಿ, ಹೊಸದು ಮಾಡುತ್ತೇನೆ.",
+    },
+    "question_unsupported": {
+        "en": "I can only tell you what the camera sees right now, for example: \"Is anyone on the sofa?\" "
+              "This is the picture now.",
+        "hi": "मैं बस यह बता सकता हूँ कि कैमरे में अभी क्या दिख रहा है, जैसे: \"क्या सोफ़े पर कोई है?\" "
+              "यह अभी की तस्वीर है।",
+        "kn": "ಕ್ಯಾಮೆರಾದಲ್ಲಿ ಈಗ ಏನು ಕಾಣುತ್ತಿದೆ ಎಂಬುದನ್ನು ಮಾತ್ರ ಹೇಳಬಲ್ಲೆ, ಉದಾಹರಣೆಗೆ: \"ಸೋಫಾ ಮೇಲೆ ಯಾರಾದರೂ "
+              "ಇದ್ದಾರಾ?\" ಇದು ಈಗಿನ ಚಿತ್ರ.",
+    },
+    "too_dark_now": {
+        "en": "It's too dark for me to see right now. This is the picture now.",
+        "hi": "अभी इतना अंधेरा है कि मुझे साफ़ नहीं दिख रहा। यह अभी की तस्वीर है।",
+        "kn": "ಈಗ ತುಂಬಾ ಕತ್ತಲಿದೆ, ನನಗೆ ಸರಿಯಾಗಿ ಕಾಣುತ್ತಿಲ್ಲ. ಇದು ಈಗಿನ ಚಿತ್ರ.",
+    },
+    "zone_not_in_view": {
+        "en": "I can't see a {zone} in the camera view right now. This is the picture now.",
+        "hi": "मुझे अभी कैमरे में {zone} नहीं दिख रहा। यह अभी की तस्वीर है।",
+        "kn": "ಕ್ಯಾಮೆರಾದಲ್ಲಿ ಈಗ {zone} ಕಾಣುತ್ತಿಲ್ಲ. ಇದು ಈಗಿನ ಚಿತ್ರ.",
     },
     "camera_view": {
         "en": "This is what the camera sees right now.",

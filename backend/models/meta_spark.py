@@ -16,10 +16,10 @@ from backend import templates
 from backend.budget import Budget, Usage
 from backend.clock import local_hhmm
 from backend.config import Settings
-from backend.models.base import Correction, InstanceDesc, TimedFrame, Verification
+from backend.models.base import Correction, InstanceDesc, Question, TimedFrame, Verification
 from backend.models.meta_common import chat_usage, make_client, with_retries
 from backend.recorder import Recorder
-from backend.schemas import RULE_LLM_SCHEMA, EventFacts, ParsedRule, Rule
+from backend.schemas import RULE_LLM_SCHEMA, EventFacts, ParsedRule, Rule, Subject
 
 PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
 
@@ -31,6 +31,15 @@ VERIFY_SCHEMA = {
 ALERT_SCHEMA = {
     "type": "object", "additionalProperties": False, "required": ["text"],
     "properties": {"text": {"type": "string"}},
+}
+QUESTION_SCHEMA = {
+    "type": "object", "additionalProperties": False,
+    "required": ["kind", "subject", "subject_name", "zone_object", "relation", "language"],
+    "properties": {"kind": {"type": "string", "enum": ["question", "rule", "unsupported"]},
+                   "subject": {"type": "string", "enum": ["person", "dog", "cat", "flame"]},
+                   "subject_name": {"type": ["string", "null"]}, "zone_object": {"type": ["string", "null"]},
+                   "relation": {"type": "string", "enum": ["in", "on", "near", "visible"]},
+                   "language": {"type": "string", "enum": ["hi", "kn", "en"]}},
 }
 CORRECTION_SCHEMA = {
     "type": "object", "additionalProperties": False, "required": ["action", "instance", "new_text"],
@@ -65,6 +74,7 @@ class MetaSpark:
         self.verify_system = (PROMPTS / "confirm_event.md").read_text(encoding="utf-8")
         self.correction_system = (PROMPTS / "resolve_correction.md").read_text(encoding="utf-8")
         self.alert_system = (PROMPTS / "write_alert.md").read_text(encoding="utf-8")
+        self.question_system = (PROMPTS / "ask_camera.md").read_text(encoding="utf-8")
         self.last_latency_ms: int | None = None
 
     async def _json(self, purpose: str, messages: list[dict], name: str, schema: dict, effort: str,
@@ -117,6 +127,15 @@ class MetaSpark:
                                "event_check", VERIFY_SCHEMA, "minimal", estimate, 25.0)
         return Verification(consistent=bool(raw["consistent"]), visible_summary=str(raw["visible_summary"])[:200],
                             confidence=raw["confidence"])
+
+    async def parse_question(self, text: str) -> Question:
+        raw = await self._json("parse_question", [{"role": "system", "content": self.question_system},
+                                                  {"role": "user", "content": text}],
+                               "camera_question", QUESTION_SCHEMA, "minimal",
+                               Usage(input_tokens=600, output_tokens=EST_MINIMAL_OUT), 20.0)
+        zone = (raw.get("zone_object") or "").strip() or None
+        return Question(kind=raw["kind"], subject=Subject(raw["subject"]), subject_name=raw.get("subject_name") or None,
+                        zone_object=zone, relation=raw["relation"] if zone else "visible", language=raw["language"])
 
     async def write_alert(self, facts: EventFacts) -> str:
         """Unvetted: the caller runs backend.alert_check.problems() and sends the template on any problem."""
