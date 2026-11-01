@@ -22,6 +22,7 @@ class FamilyMember(BaseModel):
     channel: Literal["whatsapp", "telegram", "mock"] = "whatsapp"
     aliases: list[str] = Field(default_factory=list)
     is_admin: bool = False
+    language: Literal["hi", "kn", "en"] | None = None  # unset: learned from what they write
 
 
 class Settings(BaseSettings):

@@ -144,6 +144,12 @@ class Member(BaseModel):
     escalation_order: int = 0
     is_admin: bool = False
     last_inbound_at: float | None = None
+    language: Language | None = None  # set in FAMILY_MEMBERS_JSON
+    last_language: Language | None = None  # learned from what they write
+
+    def speaks(self, default: Language) -> Language:
+        """The language for messages that aren't a reply to something they just wrote."""
+        return self.language or self.last_language or default
 
     def __repr__(self) -> str:  # keep phone numbers out of logs and tracebacks
         return f"Member(id={self.id}, name={self.name!r})"

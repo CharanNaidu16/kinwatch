@@ -97,12 +97,13 @@ class Storage:
         aliases: list[str] | None = None,
         escalation_order: int = 0,
         is_admin: bool = False,
+        language: str | None = None,
     ) -> int:
         cur = self.execute(
-            "INSERT INTO members (household_id, name, channel, address, aliases_json, escalation_order, is_admin)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO members (household_id, name, channel, address, aliases_json, escalation_order, is_admin,"
+            " language) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (household_id, name, channel, address, json.dumps(aliases or [], ensure_ascii=False),
-             escalation_order, int(is_admin)),
+             escalation_order, int(is_admin), language),
         )
         return int(cur.lastrowid)
 
@@ -112,7 +113,7 @@ class Storage:
             id=row["id"], household_id=row["household_id"], name=row["name"], channel=row["channel"],
             address=row["address"], aliases=json.loads(row["aliases_json"]),
             escalation_order=row["escalation_order"], is_admin=bool(row["is_admin"]),
-            last_inbound_at=row["last_inbound_at"],
+            last_inbound_at=row["last_inbound_at"], language=row["language"], last_language=row["last_language"],
         )
 
     def members(self, household_id: int) -> list[Member]:

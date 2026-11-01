@@ -211,3 +211,32 @@ def test_camera_view_warns_about_an_upright_picture(client):
     client.post("/api/frame", content=synthetic_frame(ONE_BED, size=(360, 640)), headers={"X-Device-Token": token})
     post(client, wa.text(PRIYA, "check", "m1"))
     assert "↻" in outbox(client)[-1].text
+
+
+# --- per-person language for notices that aren't replies ------------------------------------------
+
+def test_language_is_learned_from_what_someone_writes(client, storage):
+    member = storage.member_by_address("mock", PRIYA)
+    assert member.speaks("hi") == "hi"  # nothing known yet: the household language
+    post(client, wa.text(PRIYA, "ok", "m1"))  # too short to tell
+    assert storage.member_by_address("mock", PRIYA).last_language is None
+    post(client, wa.text(PRIYA, "can you check the room please", "m2"))
+    assert storage.member_by_address("mock", PRIYA).speaks("hi") == "en"
+    post(client, wa.text(PRIYA, "हाँ", "m3"))  # a Hindi word in Devanagari counts
+    assert storage.member_by_address("mock", PRIYA).speaks("en") == "hi"
+
+
+def test_stale_button_reply_uses_the_members_language(client, storage):
+    post(client, wa.text(PRIYA, "can you check the room please", "m1"))
+    post(client, wa.button(PRIYA, "yes:999", msg_id="m2"))
+    assert outbox(client)[-1].text == "Sorry, please tap a button or reply yes/no."
+
+
+def test_configured_language_wins(settings, storage, clock):
+    from backend.household import ensure_household
+
+    settings.family_members_json = [FamilyMember(name="Asha", address="5", channel="mock", language="kn")]
+    hid = ensure_household(storage, settings)
+    [asha] = storage.members(hid)
+    storage.execute("UPDATE members SET last_language = 'en' WHERE id = ?", (asha.id,))
+    assert storage.members(hid)[0].speaks("hi") == "kn"

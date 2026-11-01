@@ -235,7 +235,9 @@ class Router:
             return
         lock = self._locks.setdefault(member.id, asyncio.Lock())
         async with lock:
-            lang = self._language(inbound.text)
+            if inbound.kind == "text" and inbound.text:
+                self._learn_language(member, inbound.text)
+            lang = self._language(inbound.text, member)
             try:
                 await self._dispatch(inbound, member, lang)
             except BudgetExceeded as exc:
@@ -248,13 +250,26 @@ class Router:
                 self.storage.execute("UPDATE inbound_messages SET processed_at = ? WHERE provider_msg_id = ?",
                                      (self.clock.now(), inbound.provider_msg_id))
 
-    def _language(self, message: str | None) -> Language:
-        return detect_language(message) if message and message.strip() else self.settings.household_language
+    def _language(self, message: str | None, member: Member | None = None) -> Language:
+        if message and message.strip():
+            return detect_language(message)
+        return member.speaks(self.settings.household_language) if member else self.settings.household_language
+
+    def _learn_language(self, member: Member, message: str) -> None:
+        """Remember the language someone writes in, for notices that aren't replies. "ok", "3" or "pause 4"
+        say nothing about it, so only a Hindi/Kannada script or three or more words count."""
+        lang = detect_language(message)
+        if lang == "en" and len([w for w in _words(message) if w.isalpha()]) < 3:
+            return
+        if lang != member.last_language:
+            self.storage.execute("UPDATE members SET last_language = ? WHERE id = ?", (lang, member.id))
+            member.last_language = lang
 
     async def _dispatch(self, inbound: Inbound, member: Member, lang: Language) -> None:
         conv = self.conversation(member.id)
         if inbound.kind == "button":  # the button title says nothing about the member's language
-            return await self._button(inbound.button_payload or "", member, conv, self.settings.household_language)
+            return await self._button(inbound.button_payload or "", member, conv,
+                                      member.speaks(self.settings.household_language))
         if inbound.kind == "voice":
             heard = await self._transcribe(inbound, member)
             if heard is None:
@@ -265,7 +280,7 @@ class Router:
         await self.send(member, "info", text("fallback_reply", lang))
 
     async def _transcribe(self, inbound: Inbound, member: Member) -> str | None:
-        lang = self.settings.household_language
+        lang = member.speaks(self.settings.household_language)
         try:
             audio, _mime = await self.messenger.download_media(inbound.media_ref or "")
             wav = await asyncio.to_thread(voice_to_wav, audio)
@@ -278,6 +293,7 @@ class Router:
         if not heard:
             await self.send(member, "info", text("voice_failed", lang))
             return None
+        self._learn_language(member, heard)
         await self.send(member, "info", text("heard", detect_language(heard), text=heard))
         return heard
 
@@ -391,7 +407,7 @@ class Router:
 
     async def _confirmation_reply(self, message: str, member: Member, conv: Conversation) -> None:
         rule = self.storage.get_rule(conv.rule_id) if conv.rule_id else None
-        lang = rule.language if rule else self.settings.household_language
+        lang = rule.language if rule else member.speaks(self.settings.household_language)
         words = _words(message)
         n = int(conv.data.get("n", 1))
         if len(words) == 1 and words[0].isdigit():
@@ -489,7 +505,7 @@ class Router:
         rule = self.storage.get_rule(conv.rule_id) if conv.rule_id else None
         if rule is None:
             self.reset(member.id)
-            return await self.send(member, "info", text("not_set", self.settings.household_language))
+            return await self.send(member, "info", text("not_set", member.speaks(self.settings.household_language)))
         if not 1 <= number <= int(conv.data.get("n", 1)):
             return await self.send(member, "info", text("pick_one", rule.language))
         conv.data["selected"] = number
@@ -521,7 +537,7 @@ class Router:
         rule = self.storage.get_rule(conv.rule_id) if conv.rule_id else None
         if rule is None:
             self.reset(member.id)
-            return await self.send(member, "info", text("not_set", self.settings.household_language))
+            return await self.send(member, "info", text("not_set", member.speaks(self.settings.household_language)))
         selected = conv.data.get("selected")
         if selected is None:
             return await self.send(member, "info", text("pick_one", rule.language))
@@ -536,7 +552,7 @@ class Router:
 
     async def _decline(self, conv: Conversation, member: Member) -> None:
         rule = self.storage.get_rule(conv.rule_id) if conv.rule_id else None
-        lang = rule.language if rule else self.settings.household_language
+        lang = rule.language if rule else member.speaks(self.settings.household_language)
         if rule is not None:
             self.storage.execute("UPDATE rules SET status = 'deleted' WHERE id = ?", (rule.id,))
             self.storage.add_timeline(self.household_id, self.clock.now(), "rule_declined",

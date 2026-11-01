@@ -33,11 +33,12 @@ def ensure_household(storage: Storage, settings: Settings) -> int:
         current = existing.get(fm.name.casefold())
         if current is None:
             storage.add_member(household_id, fm.name, fm.address, channel=fm.channel, aliases=fm.aliases,
-                               escalation_order=order, is_admin=fm.is_admin)
+                               escalation_order=order, is_admin=fm.is_admin, language=fm.language)
             continue
         storage.execute(
             "UPDATE members SET channel = ?, address = ?, aliases_json = ?, escalation_order = ?, is_admin = ?,"
-            " last_inbound_at = CASE WHEN channel = ? AND address = ? THEN last_inbound_at END WHERE id = ?",
+            " language = ?, last_inbound_at = CASE WHEN channel = ? AND address = ? THEN last_inbound_at END"
+            " WHERE id = ?",
             (fm.channel, fm.address, json.dumps(fm.aliases, ensure_ascii=False), order, int(fm.is_admin),
-             fm.channel, fm.address, current.id))
+             fm.language, fm.channel, fm.address, current.id))
     return household_id

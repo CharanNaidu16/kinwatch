@@ -80,11 +80,11 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None, sto
         router.watcher, router.alerts = watcher, alerts
 
         async def camera_notice(kind: str, since: float) -> None:
-            lang = settings.household_language
-            message = text(f"camera_{kind}", lang, time=templates.spoken_time(local_hhmm(since), lang))
             for m in db.members(app.state.household_id):
                 if m.is_admin:
-                    await router.send(m, "info", message)
+                    lang = m.speaks(settings.household_language)
+                    await router.send(m, "info", text(f"camera_{kind}", lang,
+                                                      time=templates.spoken_time(local_hhmm(since), lang)))
 
         watcher.on_camera = camera_notice
         app.state.router, app.state.alerts, app.state.watcher = router, alerts, watcher

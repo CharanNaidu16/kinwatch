@@ -172,7 +172,7 @@ class Alerts:
         row = self.storage.query_one("SELECT a.language, e.rule_id FROM alerts a JOIN events e ON e.id = a.event_id"
                                      " WHERE a.id = ?", (alert_id,))
         if row is None:
-            return await self.send(member, "info", text("fallback_reply", self.settings.household_language))
+            return await self.send(member, "info", text("fallback_reply", member.speaks(self.settings.household_language)))
         lang = row["language"]
         won = self.storage.execute(
             "UPDATE alerts SET status = 'claimed', claimed_by = ?, claimed_at = ?, next_escalation_at = NULL"
