@@ -225,7 +225,8 @@ class Watcher:
                                       f"{local_hhmm(now)} camera turned: {rule.zone_object} found again "
                                       f"({frame.width}x{frame.height})", rule_id=rule.id)
             if self.on_zone is not None:
-                photo = await asyncio.to_thread(draw, frame.jpeg, [pick.mask], numbered=False)
+                photo = await asyncio.to_thread(draw, frame.jpeg, [pick.mask], numbered=False,
+                                                outline=self.settings.chat_outlines)
                 await self.on_zone(rule, "found", photo)
         except Exception as exc:  # budget refusal, API error: try again after ZONE_RETRY_SEC
             log.warning("finding the zone again for rule %s failed: %s", rule.id, exc)

@@ -1,7 +1,8 @@
 """Confirmation and alert images: SAM outlines drawn on the camera frame (PLAN.md §3.3).
 
 Zones get thick green outlines with big numbered badges, so the family can answer "2" or
-"the other one"; subjects are outlined in blue.
+"the other one"; subjects are outlined in blue. With outline=False (chat photos unless
+CHAT_OUTLINES is on) only the number badges are drawn, and only when there is more than one.
 """
 from __future__ import annotations
 
@@ -31,12 +32,15 @@ def _font(size: int) -> ImageFont.ImageFont:
 
 
 def draw(jpeg: bytes, zones: list[np.ndarray], *, numbered: bool, subjects: list[np.ndarray] | None = None,
-         quality: int = 85) -> bytes:
+         quality: int = 85, outline: bool = True) -> bytes:
+    numbered = numbered and (outline or len(zones) > 1)  # without outlines, a lone "1" says nothing
+    if not outline and not numbered:
+        return jpeg  # the photo exactly as the camera took it
     img = Image.open(io.BytesIO(jpeg)).convert("RGB")
     pixels = np.array(img)
-    for mask in subjects or []:
+    for mask in (subjects or []) if outline else []:
         pixels[_edge(mask, 2)] = BLUE
-    for mask in zones:
+    for mask in zones if outline else []:
         # Outline the filled zone: what the engine tests against, and a cleaner shape than SAM's mask,
         # which leaves out whatever (or whoever) covers the object.
         pixels[_edge(colfill(mask))] = GREEN

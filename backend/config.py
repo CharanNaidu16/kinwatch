@@ -73,6 +73,7 @@ class Settings(BaseSettings):
     asr_max_sec_per_day: int = 1800
 
     frame_interval_ms: int = Field(1500, ge=500, le=10000)  # how often the phone page uploads a frame
+    chat_outlines: bool = False  # outline zones/people on photos sent in the chat (the behind-the-scenes page always does)
     # SAM pacing per subject (PLAN.md §3.4): never closer than the minimum; a call when the picture
     # changes; otherwise a heartbeat (shorter while a timer is running or a baseline is being learnt).
     sam_min_interval_sec: float = 3.0

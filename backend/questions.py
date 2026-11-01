@@ -103,7 +103,7 @@ async def look(q: Question, frame: Frame, segmenter: Segmenter, settings: Settin
     subjects = _confident(subjects)
     matched = [s for s in subjects if not zones or _matches(s, zones, q.relation)]
     photo = await asyncio.to_thread(draw, frame.jpeg, [z.mask for z in zones], numbered=False,
-                                    subjects=[s.mask for s in matched])
+                                    subjects=[s.mask for s in matched], outline=settings.chat_outlines)
     return Answer(len(matched), photo, data={"zones": len(zones), "subjects_seen": len(subjects),
                                              "matched": len(matched)})
 

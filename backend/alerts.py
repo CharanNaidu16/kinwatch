@@ -112,7 +112,8 @@ class Alerts:
                            duration_min=max(1, round(rule.duration_sec / 60)) if rule.duration_sec else 0,
                            visibility=fired.data.get("visibility", "good"), language=rule.language)
         latest = evidence[-1]
-        photo = await asyncio.to_thread(draw, latest.jpeg, [zone.mask], numbered=False)
+        photo = await asyncio.to_thread(draw, latest.jpeg, [zone.mask], numbered=False,
+                                        outline=self.settings.chat_outlines)
         event_id = self.storage.execute(
             "INSERT INTO events (rule_id, started_at, met_at, facts_json, status) VALUES (?, ?, ?, ?, 'sent')",
             (rule.id, since, fired.ts, facts.model_dump_json())).lastrowid

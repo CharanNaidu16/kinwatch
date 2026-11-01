@@ -564,7 +564,8 @@ class Router:
             return await self._send_confirmation(member, rule, 1)
         names = self._names(rule, members)
         question = await self.adapters.spark.restate(rule, len(found), names)
-        image = await asyncio.to_thread(draw, frame.jpeg, [i.mask for i in found], numbered=True)
+        image = await asyncio.to_thread(draw, frame.jpeg, [i.mask for i in found], numbered=True,
+                                        outline=self.settings.chat_outlines)
         buttons = [Button(f"pick:{rule_id}:{k}", str(k)) for k in range(1, min(len(found), 3) + 1)]
         await self.send(member, "confirm", question, buttons, jpeg=image)
 
@@ -580,7 +581,8 @@ class Router:
                    Button(f"no:{rule.id}", text("button_no", rule.language))]
         image = None
         if frame is not None and 0 < selected <= len(masks):
-            image = await asyncio.to_thread(draw, frame, [masks[selected - 1]], numbered=False)
+            image = await asyncio.to_thread(draw, frame, [masks[selected - 1]], numbered=False,
+                                            outline=self.settings.chat_outlines)
         await self.send(member, "confirm", restatement, buttons, jpeg=image)
 
     async def _select(self, conv: Conversation, member: Member, number: int) -> None:
@@ -597,6 +599,7 @@ class Router:
     async def _correct(self, conv: Conversation, member: Member, rule: Rule, reply: str) -> None:
         masks = load_candidates(self.settings.data_path, rule.id)
         frame = reference_frame(self.settings.data_path, rule.id) or b""
+        # This photo goes to Muse Spark, not the family: it keeps the outlines to tell the instances apart.
         numbered = await asyncio.to_thread(draw, frame, masks, numbered=True) if frame and masks else frame
         width = masks[0].shape[1] if masks else 1
         fix = await self.adapters.spark.resolve_correction(numbered, describe(masks, width), reply,
