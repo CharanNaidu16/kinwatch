@@ -22,6 +22,7 @@ from backend.messaging import build_messenger
 from backend.messaging.base import Inbound, WebhookRejected
 from backend.models import build_adapters
 from backend.router import Router
+from backend.sessions import KEPT_DIR, FILE_RE, SessionRecorder, list_sessions, valid_name
 from backend.storage import Storage
 from backend.texts import text
 from backend.vision import ChangeDetector, FrameBuffer, FrameError, load_frame
@@ -78,6 +79,7 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None, sto
         watcher = Watcher(storage=db, settings=settings, clock=clock, adapters=app.state.adapters,
                           frames=app.state.frames, household_id=app.state.household_id, on_event=alerts.on_event)
         router.watcher, router.alerts = watcher, alerts
+        router.sessions = app.state.sessions = SessionRecorder(settings.data_path, clock, app.state.budget.spent_usd)
 
         async def camera_notice(kind: str, since: float) -> None:
             for m in db.members(app.state.household_id):
@@ -101,10 +103,16 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None, sto
                     await alerts.escalate(clock.now())
                 except Exception:
                     logging.getLogger("kinwatch.alerts").exception("escalation tick failed")
+                if app.state.sessions.active:
+                    try:
+                        app.state.sessions.state(bts.state(app.state))
+                    except Exception:
+                        logging.getLogger("kinwatch.sessions").exception("recording a snapshot failed")
 
         tick_task = asyncio.create_task(ticker())
         yield
         tick_task.cancel()
+        app.state.sessions.stop()
         with contextlib.suppress(asyncio.CancelledError):
             await tick_task
         if storage is None:
@@ -118,9 +126,14 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None, sto
         if not _token_ok(given, settings.bts_token.get_secret_value()):
             raise HTTPException(status_code=401, detail="bad or missing token")
 
+    replay = settings.mode == "replay"
+
     @app.get("/bts", include_in_schema=False)
     async def bts_page(request: Request) -> Response:
-        """Behind-the-scenes page. /bts?t=<BTS_TOKEN> swaps the token for a cookie and drops it from the URL."""
+        """Behind-the-scenes page. /bts?t=<BTS_TOKEN> swaps the token for a cookie and drops it from the URL.
+        In replay mode it is public: it only plays recorded sessions."""
+        if replay:
+            return FileResponse(BTS_PAGE, media_type="text/html", headers={"Cache-Control": "no-store"})
         if "t" in request.query_params:
             require_bts_token(request)
             response = RedirectResponse("/bts", status_code=303)
@@ -129,6 +142,35 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None, sto
             return response
         require_bts_token(request)
         return FileResponse(BTS_PAGE, media_type="text/html", headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/replay/sessions")
+    async def replay_sessions(request: Request) -> dict:
+        """Kept sessions (the replay link's), plus this laptop's recorded takes in live mode."""
+        if replay:
+            return {"mode": "replay", "kept": list_sessions(KEPT_DIR), "takes": []}
+        require_bts_token(request)
+        return {"mode": "live", "kept": list_sessions(KEPT_DIR),
+                "takes": list_sessions(settings.data_path / "sessions")}
+
+    @app.get("/api/replay/files/{kind}/{name}/{path:path}", include_in_schema=False)
+    async def replay_file(kind: str, name: str, path: str, request: Request) -> FileResponse:
+        if kind == "takes" and not replay:
+            require_bts_token(request)
+            root = settings.data_path / "sessions"
+        elif kind == "kept":
+            root = KEPT_DIR
+        else:
+            raise HTTPException(status_code=404)
+        file = root / name / path
+        if not valid_name(name) or not FILE_RE.match(path) or not file.is_file():
+            raise HTTPException(status_code=404)
+        media = "image/jpeg" if path.endswith(".jpg") else "application/json"
+        return FileResponse(file, media_type=media, headers={"Cache-Control": "public, max-age=3600"})
+
+    if replay:
+        @app.get("/", include_in_schema=False)
+        async def home() -> RedirectResponse:
+            return RedirectResponse("/bts")
 
     @app.get("/api/bts/state")
     async def bts_state(request: Request) -> dict:
@@ -178,6 +220,8 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None, sto
             if changed:
                 state.changes.mark_analysed(frame)
             await state.watcher.on_frame(frame)  # starts SAM analysis in the background when due
+            if state.sessions.active:
+                state.sessions.frame(await bts.frame(state))
             state.storage.execute("UPDATE devices SET last_seen_at = ?, last_frame_shape = ? WHERE id = ?",
                                   (now, frame.shape, state.device_id))
             armed = state.storage.query_one(

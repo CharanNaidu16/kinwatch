@@ -109,6 +109,38 @@ def is_question(message: str) -> bool:
     return message.strip().endswith("?") or w[0] in QUESTION_STARTS or kannada_yes_no
 
 
+BUTTON_WORDS = {"yes": "Yes", "no": "No", "claim": "I've got it"}
+
+
+def _mmss(seconds: float) -> str:
+    s = int(round(seconds))
+    return f"{s // 60}:{s % 60:02d}"
+
+
+def describe_inbound(inbound: Inbound) -> str:
+    """How an incoming message reads in a recorded chat."""
+    if inbound.kind == "voice":
+        return "🎤 voice note"
+    if inbound.kind == "button":
+        action, _, rest = (inbound.button_payload or "").partition(":")
+        if action == "pick":
+            return f"[taps {rest.rpartition(':')[2]}]"
+        return f"[taps {BUTTON_WORDS.get(action, action)}]"
+    return inbound.text or ""
+
+
+def record_command(message: str) -> tuple[str, str | None] | None:
+    """'record start' / 'record stop' / 'record list' / 'record delete take-2' (admins only)."""
+    w = message.strip().casefold().split()
+    if len(w) < 2 or w[0] not in ("record", "recording"):
+        return None
+    if w[1] in ("start", "stop", "list") and len(w) == 2:
+        return (w[1], None)
+    if w[1] in ("delete", "remove") and len(w) == 3:
+        return ("delete", w[2])
+    return None
+
+
 LIST_WORDS = {"rules", "rule", "list", "niyam", "नियम", "ನಿಯಮ", "ನಿಯಮಗಳು"}
 COMMAND_WORDS = {
     "pause": {"pause", "stop", "band", "roko", "बंद", "रोको", "ನಿಲ್ಲಿಸು"},
@@ -164,6 +196,7 @@ class Router:
         self.frames = frames
         self.watcher = None  # set by the app: reloaded when a rule is armed
         self.alerts = None  # set by the app: handles "I've got it"
+        self.sessions = None  # set by the app: the recorder behind "record start" / "record stop"
 
     async def introduce(self, inbound: Inbound) -> None:
         """Tell an unknown sender their address once, so the admin can add them to FAMILY_MEMBERS_JSON."""
@@ -220,6 +253,8 @@ class Router:
         self.storage.execute(
             "INSERT INTO deliveries (alert_id, member_id, kind, provider_msg_id, sent_at) VALUES (?, ?, ?, ?, ?)",
             (alert_id, member.id, kind, ref.provider_msg_id, now))
+        if self.sessions is not None and kind != "record":  # the recording's own controls stay out of it
+            self.sessions.chat("out", member.name, message, jpeg, [b.title for b in buttons or []])
 
     def apply_status(self, update: StatusUpdate) -> None:
         """Record sent/delivered/read/failed from a status webhook on the matching delivery row."""
@@ -245,6 +280,8 @@ class Router:
         if member is None:
             log.info("ignoring message from an unknown sender (%s)", inbound)
             return
+        if self.sessions is not None and not (member.is_admin and record_command(inbound.text or "")):
+            self.sessions.chat("in", member.name, describe_inbound(inbound))
         lock = self._locks.setdefault(member.id, asyncio.Lock())
         async with lock:
             if inbound.kind == "text" and inbound.text:
@@ -317,6 +354,8 @@ class Router:
     async def _message(self, message: str, kind: Literal["text", "voice"], member: Member, conv: Conversation) -> None:
         if wants_camera_view(message):
             return await self._camera_view(member, self._language(message, member))
+        if member.is_admin and self.sessions is not None and (rec := record_command(message)):
+            return await self._record(*rec, member)
         if is_claim(message) and self.alerts is not None and (alert_id := self.alerts.latest_for(member)):
             return await self.alerts.claim(alert_id, member)
         if command := rule_command(message):
@@ -368,6 +407,27 @@ class Router:
         if frame.height > frame.width:
             caption += text("camera_view_upright", lang)
         await self.send(member, "info", caption, jpeg=frame.jpeg)
+
+    # --- recording takes for the replay link -------------------------------------------------------
+
+    async def _record(self, action: str, name: str | None, member: Member) -> None:
+        rec = self.sessions
+        if action == "start":
+            reply = (text("record_already", "en", name=rec.take.name) if rec.active
+                     else text("record_started", "en", name=rec.start()))
+        elif action == "stop":
+            done = rec.stop()
+            reply = text("record_none", "en") if done is None else text(
+                "record_stopped", "en", name=done["name"], duration=_mmss(done["duration_sec"]),
+                frames=str(done["frames"]), messages=str(done["messages"]))
+        elif action == "list":
+            takes = rec.takes()
+            reply = (text("record_list", "en", takes="\n".join(
+                f"{t['name']} · {_mmss(t.get('duration_sec', 0))} · {t['size_mb']} MB" for t in takes))
+                if takes else text("record_list_empty", "en"))
+        else:
+            reply = text("record_deleted" if rec.delete(name or "") else "record_not_found", "en", name=name or "")
+        await self.send(member, "record", reply)
 
     # --- rule commands: rules / pause N / resume N / delete N ---------------------------------------
 

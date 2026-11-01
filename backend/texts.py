@@ -188,6 +188,16 @@ _TEXTS: dict[str, dict[Language, str]] = {
         "hi": "मुझे अभी कैमरे में {zone} नहीं दिख रहा। यह अभी की तस्वीर है।",
         "kn": "ಕ್ಯಾಮೆರಾದಲ್ಲಿ ಈಗ {zone} ಕಾಣುತ್ತಿಲ್ಲ. ಇದು ಈಗಿನ ಚಿತ್ರ.",
     },
+    # Recording commands are a tool for whoever films the demo, so English only.
+    "record_started": {"en": "⏺ Recording {name}. Do the run, then send \"record stop\"."},
+    "record_already": {"en": "Already recording {name}. Send \"record stop\" to finish it."},
+    "record_stopped": {"en": "⏹ Saved {name}: {duration}, {frames} frames, {messages} messages. Watch it on the "
+                             "behind-the-scenes page (Recorded takes), or delete it with \"record delete {name}\"."},
+    "record_none": {"en": "Nothing is being recorded. Send \"record start\" first."},
+    "record_list": {"en": "Recorded takes:\n{takes}"},
+    "record_list_empty": {"en": "No recorded takes yet. Send \"record start\" to record one."},
+    "record_deleted": {"en": "🗑 Deleted {name}."},
+    "record_not_found": {"en": "There's no take called {name}. Send \"record list\" to see them."},
     "camera_view": {
         "en": "This is what the camera sees right now.",
         "hi": "कैमरे में अभी यह दिख रहा है।",

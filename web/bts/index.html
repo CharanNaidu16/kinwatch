@@ -17,6 +17,7 @@
       --code:#f3f4f6; }
   }
   * { box-sizing:border-box; }
+  [hidden] { display:none !important; }  /* .pill / #replayBar set display, which would beat the attribute */
   body { margin:0; background:var(--bg); color:var(--fg);
     font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans","Noto Sans Devanagari","Noto Sans Kannada",sans-serif; }
   header { display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid var(--line); }
@@ -71,6 +72,25 @@
   .stack { display:grid; gap:14px; align-content:start; min-width:0; }
   .empty { color:var(--muted); font-size:13px; }
   #err { display:none; color:var(--bad); padding:8px 16px; }
+  #banner { margin:12px 16px 0; padding:10px 14px; border-radius:10px; border:1px solid var(--line); background:var(--panel);
+    color:var(--muted); font-size:13px; }
+  #banner b { color:var(--fg); }
+  body.replaying { padding-bottom:72px; }
+  #replayBar { position:fixed; left:0; right:0; bottom:0; display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+    padding:10px 16px; background:var(--panel); border-top:1px solid var(--line); z-index:5; }
+  #replayBar button, #replayBar select { font:inherit; color:var(--fg); background:var(--code); border:1px solid var(--line);
+    border-radius:8px; padding:6px 12px; cursor:pointer; }
+  #scrub { flex:1; min-width:140px; accent-color:var(--spark); }
+  #clock { font:13px ui-monospace,Consolas,monospace; color:var(--muted); min-width:96px; }
+  .chat { display:flex; flex-direction:column; gap:8px; max-height:560px; overflow:auto; padding-right:4px; }
+  .msg { max-width:88%; padding:8px 10px; border-radius:12px; background:var(--code); border:1px solid var(--line); }
+  .msg.in { align-self:flex-end; border-color:color-mix(in srgb, var(--spark) 40%, var(--line)); }
+  .msg .who { font-size:11px; color:var(--muted); margin-bottom:3px; display:flex; justify-content:space-between; gap:10px; }
+  .msg img { display:block; width:100%; max-width:280px; border-radius:8px; margin:4px 0; }
+  .msg .btns { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+  .msg .btns span { font-size:12px; padding:2px 10px; border-radius:999px; border:1px solid var(--line); color:var(--muted); }
+  .msg p { margin:0; white-space:pre-wrap; word-break:break-word; }
+  .takes a { color:var(--spark); }
 </style>
 </head>
 <body>
@@ -83,6 +103,7 @@
   <span class="pill">spent <b id="spentText">…</b></span>
 </header>
 <p id="err"></p>
+<div id="banner" hidden></div>
 <main>
   <div class="stack">
     <section>
@@ -99,6 +120,10 @@
     </section>
   </div>
   <div class="stack">
+    <section id="chatBox" hidden>
+      <h2>Family chat (as recorded)</h2>
+      <div class="chat" id="chat"></div>
+    </section>
     <section>
       <h2>Rules: from a sentence to what runs</h2>
       <div id="rules"></div>
@@ -114,8 +139,19 @@
         <tbody id="budget"></tbody></table>
       <p class="muted" id="caps" style="margin:8px 0 0;font-size:12px"></p>
     </section>
+    <section id="takesBox" hidden>
+      <h2>Recorded takes</h2>
+      <div class="takes" id="takes"></div>
+    </section>
   </div>
 </main>
+<div id="replayBar" hidden>
+  <button id="playBtn" title="Play / pause">⏸ Pause</button>
+  <input type="range" id="scrub" min="0" max="100" step="0.1" value="0" aria-label="Position in the recording">
+  <span id="clock">0:00 / 0:00</span>
+  <select id="speed" aria-label="Speed"><option value="1">1×</option><option value="5">5×</option><option value="20">20×</option></select>
+  <select id="sessionPick" aria-label="Session" hidden></select>
+</div>
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
@@ -188,9 +224,12 @@ function renderAlerts(alerts) {
 }
 
 function renderBudget(b) {
-  $("total").textContent = "$" + b.total_usd.toFixed(3);
-  $("today").textContent = `today $${b.today_usd.toFixed(3)} · cap $${b.caps.daily_usd}/day, $${b.caps.total_usd} total`;
-  $("spentText").textContent = "$" + b.total_usd.toFixed(3);
+  const run = b.session_usd !== undefined;  // a recording: show what this run cost
+  const shown = run ? b.session_usd : b.total_usd;
+  $("total").textContent = "$" + shown.toFixed(3);
+  $("today").textContent = run ? "spent during this recording"
+    : `today $${b.today_usd.toFixed(3)} · cap $${b.caps.daily_usd}/day, $${b.caps.total_usd} total`;
+  $("spentText").textContent = "$" + shown.toFixed(3);
   $("budget").innerHTML = b.by_purpose.length ? b.by_purpose.map((p) => {
     const m = MODEL_NAMES[p.model] || p.model;
     return `<tr><td>${chip(m)}</td><td>${esc(PURPOSE[p.purpose] || p.purpose)}</td><td class="n">${p.calls}</td><td class="n">$${p.usd.toFixed(4)}</td></tr>`;
@@ -235,9 +274,140 @@ async function refreshFrame() {
   } catch (e) { /* keep the last picture */ }
 }
 
-refreshState(); refreshFrame();
-setInterval(refreshState, 2000);
-setInterval(refreshFrame, 2000);
+function render(s) {
+  renderHeader(s); renderRules(s.rules); renderTimeline(s.timeline); renderAlerts(s.alerts); renderBudget(s.budget);
+}
+
+// --- live ---------------------------------------------------------------------------------------------
+function renderTakes(takes) {
+  if (!takes.length) return;
+  $("takesBox").hidden = false;
+  $("takes").innerHTML = takes.map((t) => `<p style="margin:0 0 6px">
+      <a href="/bts?session=${encodeURIComponent(t.name)}&kind=takes">▶ ${esc(t.name)}</a>
+      <span class="muted">· ${secs(t.duration_sec || 0)} · ${t.messages || 0} messages · ${t.size_mb} MB</span></p>`).join("")
+    + '<p class="muted" style="margin:8px 0 0;font-size:12px">Delete one in the chat with “record delete take-N”; keep the best '
+    + 'with scripts/sessions.py keep.</p>';
+}
+
+function startLive(info) {
+  if (info) renderTakes(info.takes || []);
+  refreshState(); refreshFrame();
+  setInterval(refreshState, 2000);
+  setInterval(refreshFrame, 2000);
+}
+
+// --- replay: plays a recorded session from its files; nothing here calls a model or a messenger ---------
+const fmt = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+async function getJson(url) { const r = await fetch(url, {credentials: "same-origin"}); if (!r.ok) throw new Error(url); return r.json(); }
+async function getLines(url) {
+  const r = await fetch(url, {credentials: "same-origin"});
+  if (!r.ok) return [];
+  return (await r.text()).split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
+}
+function lastAt(items, t) {  // index of the last item with item.t <= t, or -1
+  let lo = 0, hi = items.length - 1, found = -1;
+  while (lo <= hi) { const mid = (lo + hi) >> 1; if (items[mid].t <= t) { found = mid; lo = mid + 1; } else hi = mid - 1; }
+  return found;
+}
+
+function renderChat(chat, upto, base) {
+  const box = $("chat");
+  if (upto < 0) { box.innerHTML = '<p class="empty">No messages yet.</p>'; return; }
+  box.innerHTML = chat.slice(0, upto + 1).map((m) => {
+    const who = m.dir === "in" ? `${esc(m.member)} → Kinwatch` : `Kinwatch → ${esc(m.member)}`;
+    return `<div class="msg ${m.dir}"><div class="who"><span>${who}</span><span>${fmt(m.t)}</span></div>
+      ${m.photo ? `<img src="${base + m.photo}" alt="Photo sent with this message">` : ""}
+      <p>${esc(m.text)}</p>
+      ${m.buttons && m.buttons.length ? `<div class="btns">${m.buttons.map((b) => `<span>${esc(b)}</span>`).join("")}</div>` : ""}
+    </div>`;
+  }).join("");
+  box.scrollTop = box.scrollHeight;
+  // Photos change the height as they load: keep the newest message in view.
+  box.querySelectorAll("img").forEach((img) => { img.onload = () => { box.scrollTop = box.scrollHeight; }; });
+}
+
+async function startReplay(kind, name, info) {
+  const base = `/api/replay/files/${kind}/${encodeURIComponent(name)}/`;
+  let meta, states, frames, chat;
+  try {
+    [meta, states, frames, chat] = await Promise.all([getJson(base + "session.json"), getLines(base + "states.jsonl"),
+      getLines(base + "frames.jsonl"), getLines(base + "chat.jsonl")]);
+  } catch (e) {
+    $("err").textContent = `Couldn't load the recording “${name}”.`; $("err").style.display = "block"; return;
+  }
+  document.body.classList.add("replaying");
+  $("replayBar").hidden = false; $("chatBox").hidden = false; $("banner").hidden = false;
+  const when = meta.recorded_at ? new Date(meta.recorded_at).toLocaleString([], {dateStyle: "medium", timeStyle: "short"}) : "";
+  $("banner").innerHTML = `<b>Replay of a real recorded session</b>${meta.title ? ` · ${esc(meta.title)}` : ""}${when ? ` · recorded ${esc(when)}` : ""}.
+    Nothing on this page calls Meta's models or Telegram: it plays back what was recorded, at its real timing.
+    The full version runs on a laptop with a phone as the camera; see the README.`;
+  if (info && info.kept && info.kept.length > 1 && kind === "kept") {
+    $("sessionPick").hidden = false;
+    $("sessionPick").innerHTML = info.kept.map((s) => `<option value="${esc(s.name)}" ${s.name === name ? "selected" : ""}>${esc(s.title || s.name)}</option>`).join("");
+    $("sessionPick").onchange = () => { location.search = "?session=" + encodeURIComponent($("sessionPick").value); };
+  }
+  const duration = Math.max(meta.duration_sec || 0, ...[states, frames, chat].map((a) => a.length ? a[a.length - 1].t : 0));
+  $("scrub").max = duration;
+  const startAt = Math.min(duration, Math.max(0, parseFloat(new URLSearchParams(location.search).get("at")) || 0));
+  let t = startAt, playing = true, speed = 1, prev = performance.now(), shown = {state: -2, frame: -2, chat: -2};
+
+  function draw(force) {
+    const si = lastAt(states, t), fi = lastAt(frames, t), ci = lastAt(chat, t);
+    if (si !== shown.state || force) {
+      shown.state = si;
+      if (si >= 0) { render(states[si].state); $("modeText").textContent = "REPLAY"; }
+    }
+    if (fi !== shown.frame) {
+      shown.frame = fi;
+      if (fi >= 0) { $("frame").src = base + frames[fi].file; $("frame").style.display = "block"; $("noFrame").style.display = "none"; }
+    }
+    if (ci !== shown.chat) { shown.chat = ci; renderChat(chat, ci, base); }
+    $("scrub").value = t;
+    $("clock").textContent = `${fmt(t)} / ${fmt(duration)}`;
+  }
+  function loop(now) {
+    if (playing) {
+      t = Math.min(duration, t + (now - prev) / 1000 * speed);
+      if (t >= duration) { playing = false; $("playBtn").textContent = "↺ Replay"; }
+    }
+    prev = now;
+    draw(false);
+    requestAnimationFrame(loop);
+  }
+  $("playBtn").onclick = () => {
+    if (!playing && t >= duration) t = 0;
+    playing = !playing;
+    $("playBtn").textContent = playing ? "⏸ Pause" : "▶ Play";
+  };
+  $("scrub").oninput = () => { t = parseFloat($("scrub").value); draw(true); };
+  $("speed").onchange = () => { speed = parseFloat($("speed").value); };
+  frames.slice(0, 20).forEach((f) => { new Image().src = base + f.file; });  // smooth start
+  draw(true);
+  requestAnimationFrame(loop);
+}
+
+async function boot() {
+  const params = new URLSearchParams(location.search);
+  let info = null;
+  try {
+    const r = await fetch("/api/replay/sessions", {cache: "no-store", credentials: "same-origin"});
+    if (r.ok) info = await r.json();
+  } catch (e) { /* live page still works */ }
+  const wanted = params.get("session");
+  if (info && (info.mode === "replay" || wanted)) {
+    const kind = params.get("kind") === "takes" ? "takes" : "kept";
+    const list = (kind === "takes" ? info.takes : info.kept) || [];
+    const name = wanted || (list[0] && list[0].name);
+    if (name) return startReplay(kind, name, info);
+    if (info.mode === "replay") {
+      $("banner").hidden = false;
+      $("banner").textContent = "No recorded sessions have been published yet.";
+      return;
+    }
+  }
+  startLive(info);
+}
+boot();
 </script>
 </body>
 </html>
