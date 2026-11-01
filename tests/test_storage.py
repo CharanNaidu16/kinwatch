@@ -11,7 +11,7 @@ TABLES = {"households", "members", "devices", "rules", "rule_state", "conversati
 
 def test_migrations_create_every_table_and_are_idempotent(tmp_path):
     db = Storage(tmp_path / "k.db")
-    assert db.migrate() == ["001_init.sql", "002_member_language.sql"]
+    assert db.migrate() == ["001_init.sql", "002_member_language.sql", "003_alert_texts.sql"]
     assert db.migrate() == []
     names = {r["name"] for r in db.query("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert TABLES <= names

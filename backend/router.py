@@ -84,6 +84,18 @@ RULE_PHRASES = ("tell me", "let me know", "alert", "notify", "inform", "remind",
                 "बताओ", "बता देना", "ತಿಳಿಸು", "ಹೇಳು")
 
 
+def shown_language(message: str) -> Language | None:
+    """The language a message is clearly written in, or None when it's too short to tell. Devanagari,
+    Kannada script or Hinglish words say so at once; English needs three or more words ("ok", "3",
+    "pause 4" and "check" fit any conversation)."""
+    if not message.strip():
+        return None
+    lang = detect_language(message)
+    if lang == "en" and len([w for w in _words(message) if w.isalpha()]) < 3:
+        return None
+    return lang
+
+
 def is_question(message: str) -> bool:
     """A question about right now, not a rule ("tell me if…") in question form. Spark gets the final say."""
     w = _words(message)
@@ -251,15 +263,20 @@ class Router:
                                      (self.clock.now(), inbound.provider_msg_id))
 
     def _language(self, message: str | None, member: Member | None = None) -> Language:
-        if message and message.strip():
-            return detect_language(message)
-        return member.speaks(self.settings.household_language) if member else self.settings.household_language
+        """Reply in the language of this message when it shows one; otherwise ("yes", "3", "check") keep to
+        the language this person has been writing in."""
+        shown = shown_language(message or "")
+        if shown is not None:
+            return shown
+        if member is not None and (member.language or member.last_language):
+            return member.speaks(self.settings.household_language)
+        # Nothing known about them yet: even "rules" or "ok" says more than the household default does.
+        return detect_language(message) if message and message.strip() else self.settings.household_language
 
     def _learn_language(self, member: Member, message: str) -> None:
-        """Remember the language someone writes in, for notices that aren't replies. "ok", "3" or "pause 4"
-        say nothing about it, so only a Hindi/Kannada script or three or more words count."""
-        lang = detect_language(message)
-        if lang == "en" and len([w for w in _words(message) if w.isalpha()]) < 3:
+        """Remember the language someone writes in, so the whole conversation stays in it."""
+        lang = shown_language(message)
+        if lang is None:
             return
         if lang != member.last_language:
             self.storage.execute("UPDATE members SET last_language = ? WHERE id = ?", (lang, member.id))
@@ -294,16 +311,16 @@ class Router:
             await self.send(member, "info", text("voice_failed", lang))
             return None
         self._learn_language(member, heard)
-        await self.send(member, "info", text("heard", detect_language(heard), text=heard))
+        await self.send(member, "info", text("heard", self._language(heard, member), text=heard))
         return heard
 
     async def _message(self, message: str, kind: Literal["text", "voice"], member: Member, conv: Conversation) -> None:
         if wants_camera_view(message):
-            return await self._camera_view(member, self._language(message))
+            return await self._camera_view(member, self._language(message, member))
         if is_claim(message) and self.alerts is not None and (alert_id := self.alerts.latest_for(member)):
             return await self.alerts.claim(alert_id, member)
         if command := rule_command(message):
-            return await self._rule_command(*command, member, self._language(message))
+            return await self._rule_command(*command, member, self._language(message, member))
         if conv.state == "awaiting_confirmation":
             return await self._confirmation_reply(message, member, conv)
         if conv.state == "awaiting_clarification":
@@ -317,7 +334,7 @@ class Router:
 
     async def _question(self, message: str, kind: Literal["text", "voice"], member: Member) -> None:
         """Ask the camera: one Spark read of the question, then SAM on the latest frame (see questions.py)."""
-        lang = self._language(message)
+        lang = self._language(message, member)
         frame = self.frames.latest(self.clock.now(), FRESH_FRAME_SEC) if self.frames is not None else None
         if frame is None:
             return await self.send(member, "info", text("camera_offline", lang))

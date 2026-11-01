@@ -21,7 +21,10 @@ RECORDED_FIXTURES = RECORDED / "spark_parse_rule.json"
 
 _DEVANAGARI = re.compile(r"[ऀ-ॿ]")
 _KANNADA = re.compile(r"[ಀ-೿]")
-_HINGLISH = re.compile(r"\b(batana|batao|raat|agar|toh|mujhe|papa ko|dekhna)\b", re.IGNORECASE)
+# Hindi typed in Latin letters ("papa sofe pe hain kya?"): words that aren't also common English words.
+_HINGLISH = re.compile(r"\b(batana|batao|bata|raat|agar|toh|mujhe|papa ko|dekhna|dekho|dekh|dekhte|hai|hain|haan|"
+                       r"nahi|nahin|kya|kyun|kahan|kaun|kab|theek|thik|accha|acha|abhi|wapas|mein|mera|meri|mere|"
+                       r"aap|tum|bolo|karo|kijiye|lunga|lungi|leta|leti|sofe|bistar|uthe|aaye|aaya)\b", re.IGNORECASE)
 _NUMBER_WORDS = {"दस": 10, "पांच": 5, "पाँच": 5, "बीस": 20, "ten": 10, "five": 5, "twenty": 20,
                  "ಹತ್ತು": 10, "ಐದು": 5, "ಇಪ್ಪತ್ತು": 20}
 _NIGHT = re.compile(r"night|raat|रात|ರಾತ್ರಿ", re.IGNORECASE)

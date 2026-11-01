@@ -26,7 +26,7 @@ from backend.engine import Transition
 from backend.messaging.base import Button
 from backend.models import Adapters
 from backend.models.base import TimedFrame
-from backend.schemas import Condition, EventFacts, Member, Rule
+from backend.schemas import Condition, EventFacts, Language, Member, Rule
 from backend.snapshot import draw
 from backend.storage import Storage
 from backend.texts import text
@@ -121,24 +121,43 @@ class Alerts:
         (folder / "snapshot.jpg").write_bytes(photo)
         self.storage.execute("UPDATE events SET snapshot_path = ? WHERE id = ?", (str(folder / "snapshot.jpg"), event_id))
 
-        message, writer = await self._write(facts)
-        alert_id = self.storage.execute(
-            "INSERT INTO alerts (event_id, text, language, next_escalation_at) VALUES (?, ?, ?, ?)",
-            (event_id, message, rule.language, now + self.settings.effective_claim_timeout_sec)).lastrowid
         members = self._members()
-        button = [Button(f"claim:{alert_id}", text("claim_button", rule.language))]
         recipients = [members[i] for i in rule.notify if i in members]
-        await asyncio.gather(*(self.send(m, "alert", message, button, jpeg=photo, alert_id=alert_id)
-                               for m in recipients))
+        # Each person reads it in the language they write in; someone who hasn't written yet, in the rule's.
+        speaks = {m.id: m.speaks(rule.language) for m in recipients}
+        languages = sorted(set(speaks.values()) | {rule.language}, key=lambda lang: lang != rule.language)
+        written = await asyncio.gather(*(self._write(facts.model_copy(update={"language": lang}))
+                                         for lang in languages))
+        texts = {lang: w[0] for lang, w in zip(languages, written)}
+        message, writer = written[0]  # the rule's own language
+        alert_id = self.storage.execute(
+            "INSERT INTO alerts (event_id, text, language, next_escalation_at, texts_json) VALUES (?, ?, ?, ?, ?)",
+            (event_id, message, rule.language, now + self.settings.effective_claim_timeout_sec,
+             json.dumps(texts, ensure_ascii=False))).lastrowid
+        await asyncio.gather(*(self.send(m, "alert", texts[speaks[m.id]], self._button(alert_id, speaks[m.id]),
+                                         jpeg=photo, alert_id=alert_id) for m in recipients))
         self.storage.add_timeline(self.household_id, now, "alert_sent",
                                   f"{local_hhmm(now)} alert sent to {', '.join(m.name for m in recipients)}",
                                   rule_id=rule.id, data={"event_id": event_id, "alert_id": alert_id, "text": message,
-                                                         **writer})
+                                                         "languages": languages, **writer})
 
         task = asyncio.create_task(self._verify(event_id, rule, evidence, has_before))
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
         return alert_id
+
+    @staticmethod
+    def _button(alert_id: int, lang: Language) -> list[Button]:
+        return [Button(f"claim:{alert_id}", text("claim_button", lang))]
+
+    def _text_in(self, row, lang: Language) -> str:
+        """The alert in `lang`: as written when it went out, else the template from the stored facts."""
+        texts = json.loads(row["texts_json"] or "{}")
+        if lang in texts:
+            return texts[lang]
+        if row["language"] == lang:
+            return row["text"]
+        return templates.alert(EventFacts.model_validate_json(row["facts_json"]).model_copy(update={"language": lang}))
 
     async def _write(self, facts: EventFacts) -> tuple[str, dict]:
         """Spark's wording when it passes every check; the fixed template otherwise (and always when the
@@ -173,7 +192,7 @@ class Alerts:
                                      " WHERE a.id = ?", (alert_id,))
         if row is None:
             return await self.send(member, "info", text("fallback_reply", member.speaks(self.settings.household_language)))
-        lang = row["language"]
+        lang = member.speaks(row["language"])
         won = self.storage.execute(
             "UPDATE alerts SET status = 'claimed', claimed_by = ?, claimed_at = ?, next_escalation_at = NULL"
             " WHERE id = ? AND status IN (?, ?)", (member.id, now, alert_id, *CLAIMABLE)).rowcount == 1
@@ -187,8 +206,11 @@ class Alerts:
         await self.send(member, "info", text("claim_thanks", lang), alert_id=alert_id)
         alerted = self._alerted(alert_id)
         members = self._members()
-        notice = text("claimed_notice", lang, name=member.name, time=templates.spoken_time(local_hhmm(now), lang))
-        await asyncio.gather(*(self.send(members[i], "claim_notice", notice, alert_id=alert_id)
+
+        def notice(other: Member) -> str:
+            ol = other.speaks(row["language"])
+            return text("claimed_notice", ol, name=member.name, time=templates.spoken_time(local_hhmm(now), ol))
+        await asyncio.gather(*(self.send(members[i], "claim_notice", notice(members[i]), alert_id=alert_id)
                                for i in alerted if i != member.id and i in members))
 
     # --- escalation -------------------------------------------------------------------------------
@@ -196,7 +218,8 @@ class Alerts:
     async def escalate(self, now: float) -> None:
         """Move every open alert whose claim deadline has passed one level (called by the app's ticker)."""
         rows = self.storage.query(
-            "SELECT a.id, a.text, a.language, a.escalation_level, e.rule_id, e.met_at, e.snapshot_path"
+            "SELECT a.id, a.text, a.language, a.texts_json, a.escalation_level, e.rule_id, e.met_at,"
+            " e.snapshot_path, e.facts_json"
             " FROM alerts a JOIN events e ON e.id = a.event_id"
             " WHERE a.status = 'open' AND a.next_escalation_at <= ? ORDER BY a.next_escalation_at", (now,))
         for row in rows:
@@ -206,7 +229,7 @@ class Alerts:
                 log.exception("escalation of alert %s failed", row["id"])
 
     async def _escalate(self, row, now: float) -> None:
-        alert_id, lang = row["id"], row["language"]
+        alert_id, rule_lang = row["id"], row["language"]
         level = row["escalation_level"] + 1
         timeout = self.settings.effective_claim_timeout_sec
         expire = level > MAX_ESCALATIONS
@@ -219,8 +242,10 @@ class Alerts:
         members = self._members()
         alerted = [members[i] for i in sorted(self._alerted(alert_id)) if i in members]
         if expire:
-            notice = text("alert_expired", lang, time=templates.spoken_time(local_hhmm(row["met_at"]), lang))
-            await asyncio.gather(*(self.send(m, "expired", notice, alert_id=alert_id) for m in alerted))
+            def notice(m: Member) -> str:
+                lang = m.speaks(rule_lang)
+                return text("alert_expired", lang, time=templates.spoken_time(local_hhmm(row["met_at"]), lang))
+            await asyncio.gather(*(self.send(m, "expired", notice(m), alert_id=alert_id) for m in alerted))
             self.storage.add_timeline(self.household_id, now, "alert_expired",
                                       f"{local_hhmm(now)} nobody claimed the alert", rule_id=row["rule_id"],
                                       data={"alert_id": alert_id})
@@ -228,22 +253,26 @@ class Alerts:
 
         path = Path(row["snapshot_path"]) if row["snapshot_path"] else None
         photo = path.read_bytes() if path is not None and path.exists() else None
-        button = [Button(f"claim:{alert_id}", text("claim_button", lang))]
         alerted_ids = {m.id for m in alerted}
         newcomer = next((m for m in members.values()
                          if m.id not in alerted_ids and m.channel == self.settings.messenger), None)
         if level >= 2 and newcomer is not None:
             names = ", ".join(m.name for m in alerted)
-            message = f"{text('escalation', lang, names=names)}\n\n{row['text']}"
-            await self.send(newcomer, "escalation", message, button, jpeg=photo, alert_id=alert_id)
+            lang = newcomer.speaks(rule_lang)
+            message = f"{text('escalation', lang, names=names)}\n\n{self._text_in(row, lang)}"
+            await self.send(newcomer, "escalation", message, self._button(alert_id, lang), jpeg=photo,
+                            alert_id=alert_id)
             self.storage.add_timeline(self.household_id, now, "alert_escalated",
                                       f"{local_hhmm(now)} no answer from {names}: alert sent to {newcomer.name}",
                                       rule_id=row["rule_id"], data={"alert_id": alert_id, "level": level})
             return
-        wait = templates.spoken_duration(int(level * timeout), lang)
-        message = f"{text('resend', lang, wait=wait)}\n\n{row['text']}"
-        await asyncio.gather(*(self.send(m, "resend", message, button, jpeg=photo, alert_id=alert_id)
-                               for m in alerted))
+        def resend(m: Member) -> str:
+            lang = m.speaks(rule_lang)
+            wait = templates.spoken_duration(int(level * timeout), lang)
+            return f"{text('resend', lang, wait=wait)}\n\n{self._text_in(row, lang)}"
+        await asyncio.gather(*(self.send(m, "resend", resend(m), self._button(alert_id, m.speaks(rule_lang)),
+                                         jpeg=photo, alert_id=alert_id) for m in alerted))
+        wait = templates.spoken_duration(int(level * timeout), "en")
         self.storage.add_timeline(self.household_id, now, "alert_resent",
                                   f"{local_hhmm(now)} still unclaimed after {wait}: re-sent to "
                                   f"{', '.join(m.name for m in alerted)}",
