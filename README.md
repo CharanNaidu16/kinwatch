@@ -50,9 +50,27 @@ URL. Set `USE_MOCKS=false` and `META_API_KEY` to use the real Meta models.
 | `rules` | your rules, numbered, with on/paused |
 | `pause 3`, `resume 3`, `delete 3` | change rule 3 (`नियम 3 बंद` works too) |
 | `got it` (or the button) | you're handling the latest alert; the others are told |
+| `Is Papa on the sofa?` | a yes/no from the camera right now, with the photo outlined |
+| `record start`, `record stop`, `record list`, `record delete take-2` | record takes for the replay (admins) |
 
 An alert nobody claims is re-sent after the claim timeout (2 min, 30 s in demo mode), then sent to
 the next person in `FAMILY_MEMBERS_JSON`, and closes after three timeouts with a final notice.
+Everyone gets messages in the language they write in (English, Hindi or Kannada).
+
+The bot also sends a **behind-the-scenes** link: each rule from sentence to Muse Spark's JSON to
+the SAM 3.1 zone to the engine's timer, the live camera with outlines, the timeline and API cost.
+
+### Recording a session for the replay link
+
+1. Send `record start`, do the run, send `record stop`. The take is saved in `data/sessions/`
+   (never committed) and listed under "Recorded takes" on the behind-the-scenes page to watch.
+2. Keep the good ones, trimmed, with family names swapped for sample names:
+   ```bash
+   python scripts/sessions.py list
+   python scripts/sessions.py keep take-2 --as sofa-demo --from 40 --to 250 --title "Sofa: alert and claim"
+   ```
+3. Commit `fixtures/sessions/sofa-demo`. `MODE=replay uvicorn backend.main:app` serves only kept
+   sessions, makes no API calls and refuses to start if `META_API_KEY` is set.
 
 ## Check your Meta API key (about $0.02)
 
