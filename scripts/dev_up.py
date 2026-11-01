@@ -212,8 +212,11 @@ def main() -> None:
             sys.exit("cloudflared didn't report a tunnel URL within 45 s.")
         public = urls[0]
         print(f"Tunnel: {public}  (waiting for it to answer...)")
-        if not _wait_http(f"{public}/healthz", 60):
-            sys.exit("The tunnel URL isn't reachable yet; try running the script again.")
+        if not _wait_http(f"{public}/healthz", 120):
+            # Usually this laptop's DNS being slow to learn the brand-new name (cloudflared logs
+            # "DNS local resolver ... i/o timeout"); Telegram and the phones resolve it themselves.
+            print("Couldn't confirm the tunnel from this laptop (often slow local DNS). Carrying on: "
+                  "if the camera link doesn't open on the phone, run this script again.")
 
         camera = f"{public}/phone?d={settings.device_token.get_secret_value()}"
         bts = f"{public}/bts?t={settings.bts_token.get_secret_value()}"
