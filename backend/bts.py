@@ -22,7 +22,8 @@ MODELS = {
     "rule_parsed": ["Muse Spark"], "rule_armed": ["SAM 3.1"], "question_answered": ["Muse Spark", "SAM 3.1"],
     "rule_pending": ["SAM 3.1", "engine"], "rule_returned": ["SAM 3.1", "engine"], "rule_fired": ["engine"],
     "rule_over": ["SAM 3.1", "engine"], "rule_baseline": ["SAM 3.1", "engine"], "alert_resent": ["engine"],
-    "alert_escalated": ["engine"], "alert_expired": ["engine"],
+    "alert_escalated": ["engine"], "alert_expired": ["engine"], "zone_refreshed": ["SAM 3.1"],
+    "zone_missing": ["SAM 3.1"],
 }
 
 

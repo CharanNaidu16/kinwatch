@@ -4,6 +4,10 @@ Cost control: SAM is called only for subjects of armed rules that are inside the
 only when the picture changed (or a heartbeat is due), at most one call in flight per subject, and
 never more often than SAM_MIN_INTERVAL_SEC. Anything that prevents seeing (dark frame, SAM error,
 budget refusal, camera moved) is an UNKNOWN reading, never a guess.
+
+When the picture changes shape (the phone was turned), the stored zone no longer lines up, so one
+SAM call finds the object again, picks the instance that matches the old one allowing for a quarter
+or half turn, saves it and tells the family with the outlined photo (PLAN.md §3.4 "camera moved").
 """
 from __future__ import annotations
 
@@ -21,16 +25,19 @@ from backend.models.base import Instance
 from backend.schemas import Condition, Observation, Rule, Subject
 from backend.storage import Storage
 from backend.vision import MIN_CONFIDENCE, ChangeDetector, Frame, FrameBuffer, Zone, is_in, is_near, is_on
-from backend.zones import load_candidates
+from backend.snapshot import draw
+from backend.zones import load_candidates, save_candidates
 
 log = logging.getLogger("kinwatch.watcher")
 
 SUBJECT_CONCEPTS = {Subject.PERSON: "person", Subject.DOG: "dog", Subject.CAT: "cat", Subject.FLAME: "flame"}
 GUARD_STALE_SEC = 90  # a guard reading older than this counts as unknown
 CAMERA_LOST_SEC = 120  # no frame for this long while a rule is watching: tell the family once
+ZONE_RETRY_SEC = 30  # after the picture changes shape, look for the zone again at most this often
 
 EventHandler = Callable[[Rule, Transition, list[Frame], Zone, bool], Awaitable[None]]
 CameraHandler = Callable[[str, float], Awaitable[None]]  # ("lost" | "back", since)
+ZoneHandler = Callable[[Rule, str, bytes], Awaitable[None]]  # (rule, "found" | "missing", photo)
 
 
 @dataclass
@@ -43,6 +50,9 @@ class Runtime:
     last_held_false: Frame | None = None  # last frame where the condition did NOT hold (evidence)
     pending_frame: Frame | None = None
     last_count: int | None = None  # subjects in/on/near the zone at the last analysis (behind-the-scenes page)
+    zone_retry_at: float = 0.0  # picture changed shape: next time to look for the zone again
+    zone_busy: bool = False
+    zone_missing_told: bool = False
 
     @property
     def subject_concept(self) -> str:
@@ -63,6 +73,7 @@ class Watcher:
     household_id: int
     on_event: EventHandler | None = None
     on_camera: CameraHandler | None = None
+    on_zone: ZoneHandler | None = None
     runtimes: dict[int, Runtime] = field(default_factory=dict)
     _last_call: dict[str, float] = field(default_factory=dict)
     _inflight: set[str] = field(default_factory=set)
@@ -141,6 +152,13 @@ class Watcher:
         now = self.clock.now()
         await self.tick(now, frame)
         started = []
+        for rt in list(self.runtimes.values()):
+            if self._zone_needs_refresh(rt, frame, now):
+                rt.zone_busy, rt.zone_retry_at = True, now + ZONE_RETRY_SEC
+                task = asyncio.create_task(self.refresh_zone(rt, frame))
+                self._tasks.add(task)
+                task.add_done_callback(self._tasks.discard)
+                started.append(task)
         for concept, users in self._concepts().items():
             if self._due(concept, users, frame, now):
                 self._inflight.add(concept)
@@ -174,6 +192,45 @@ class Watcher:
             self.storage.add_timeline(self.household_id, now, "camera_back", f"{local_hhmm(now)} camera is back")
             if self.on_camera is not None:
                 await self.on_camera("back", now)
+
+    # --- the phone was turned ---------------------------------------------------------------------
+
+    @staticmethod
+    def _zone_needs_refresh(rt: Runtime, frame: Frame, now: float) -> bool:
+        return (rt.zone is not None and rt.zone.shape != (frame.height, frame.width) and not frame.dark
+                and not rt.zone_busy and now >= rt.zone_retry_at and rt.engine.phase != Phase.OUT_OF_WINDOW)
+
+    async def refresh_zone(self, rt: Runtime, frame: Frame) -> None:
+        rule, old = rt.rule, rt.zone
+        concept = self.settings.sam_concept(rule.zone_object)
+        try:
+            found = await self.adapters.segmenter.segment(frame.jpeg, concept, purpose="zone_refresh")
+            found = [i for i in found if (i.confidence is None or i.confidence >= MIN_CONFIDENCE) and i.mask.any()]
+            now = self.clock.now()
+            if not found:
+                if not rt.zone_missing_told:
+                    rt.zone_missing_told = True
+                    self.storage.add_timeline(self.household_id, now, "zone_missing",
+                                              f"{local_hhmm(now)} camera turned: no {rule.zone_object} in view",
+                                              rule_id=rule.id)
+                    if self.on_zone is not None:
+                        await self.on_zone(rule, "missing", frame.jpeg)
+                return
+            pick = match_zone(found, old.box, old.shape, (frame.height, frame.width)) if old else found[0]
+            rt.zone, rt.zone_missing_told = Zone.from_mask(pick.mask, concept), False
+            save_candidates(self.settings.data_path, rule.id, frame.jpeg, [pick.mask])
+            self.storage.execute("UPDATE rules SET zone_instance = 1 WHERE id = ?", (rule.id,))
+            rt.rule = rule.model_copy(update={"zone_instance": 1})
+            self.storage.add_timeline(self.household_id, now, "zone_refreshed",
+                                      f"{local_hhmm(now)} camera turned: {rule.zone_object} found again "
+                                      f"({frame.width}x{frame.height})", rule_id=rule.id)
+            if self.on_zone is not None:
+                photo = await asyncio.to_thread(draw, frame.jpeg, [pick.mask], numbered=False)
+                await self.on_zone(rule, "found", photo)
+        except Exception as exc:  # budget refusal, API error: try again after ZONE_RETRY_SEC
+            log.warning("finding the zone again for rule %s failed: %s", rule.id, exc)
+        finally:
+            rt.zone_busy = False
 
     # --- analysis ---------------------------------------------------------------------------------
 
@@ -272,3 +329,22 @@ def _describe(rule: Rule, t: Transition) -> str:
     if t.kind == "fired":
         return f"{at} {who}: rule met after {int(rule.duration_sec)} s, alerting"
     return f"{at} rule {rule.id}: occurrence over"
+
+
+def _centre(box: tuple[int, int, int, int], shape: tuple[int, int]) -> tuple[float, float]:
+    x1, y1, x2, y2 = box
+    h, w = shape
+    return (x1 + x2) / 2 / w, (y1 + y2) / 2 / h
+
+
+def match_zone(found: list[Instance], old_box: tuple[int, int, int, int], old_shape: tuple[int, int],
+               new_shape: tuple[int, int]) -> Instance:
+    """The candidate where the old zone would be after the phone turned: no turn, a quarter turn either
+    way, or a half turn, whichever puts some candidate closest (positions as fractions of the frame)."""
+    ox, oy = _centre(old_box, old_shape)
+    turned = [(ox, oy), (1 - oy, ox), (oy, 1 - ox), (1 - ox, 1 - oy)]
+
+    def distance(i: Instance) -> float:
+        cx, cy = _centre((i.box.x1, i.box.y1, i.box.x2, i.box.y2), new_shape)
+        return min((cx - x) ** 2 + (cy - y) ** 2 for x, y in turned)
+    return min(found, key=distance)

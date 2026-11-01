@@ -89,6 +89,17 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None, sto
                                                       time=templates.spoken_time(local_hhmm(since), lang)))
 
         watcher.on_camera = camera_notice
+
+        async def zone_notice(rule, kind: str, photo: bytes) -> None:
+            """The phone was turned: tell the rule's creator and the admins, each in their language."""
+            key = "zone_found_again" if kind == "found" else "zone_missing_after_turn"
+            for m in db.members(app.state.household_id):
+                if m.is_admin or m.id == rule.created_by:
+                    lang = m.speaks(rule.language)
+                    await router.send(m, "info", text(key, lang, zone=templates.zone_word(rule.zone_object, lang),
+                                                      n=str(rule.id)), jpeg=photo)
+
+        watcher.on_zone = zone_notice
         app.state.router, app.state.alerts, app.state.watcher = router, alerts, watcher
         watcher.reload()
 

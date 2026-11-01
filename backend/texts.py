@@ -198,6 +198,19 @@ _TEXTS: dict[str, dict[Language, str]] = {
     "record_list_empty": {"en": "No recorded takes yet. Send \"record start\" to record one."},
     "record_deleted": {"en": "🗑 Deleted {name}."},
     "record_not_found": {"en": "There's no take called {name}. Send \"record list\" to see them."},
+    "zone_found_again": {
+        "en": "📷 The camera picture turned, so I found the {zone} again (outlined). Rule {n} keeps watching.",
+        "hi": "📷 कैमरे की तस्वीर घूम गई, इसलिए मैंने {zone} फिर से ढूँढ लिया (घेरे में)। नियम {n} नज़र रखता रहेगा।",
+        "kn": "📷 ಕ್ಯಾಮೆರಾ ಚಿತ್ರ ತಿರುಗಿತು, ಹಾಗಾಗಿ {zone} ಮತ್ತೆ ಹುಡುಕಿದೆ (ಗುರುತು ಹಾಕಿದೆ). ನಿಯಮ {n} ಗಮನಿಸುತ್ತಲೇ ಇರುತ್ತದೆ.",
+    },
+    "zone_missing_after_turn": {
+        "en": "📷 The camera picture turned and I can't see the {zone} now, so rule {n} can't watch. Point the "
+              "phone at it (or tap ↻ on the camera page); I'll keep looking.",
+        "hi": "📷 कैमरे की तस्वीर घूम गई और मुझे अब {zone} नहीं दिख रहा, इसलिए नियम {n} नज़र नहीं रख पा रहा। "
+              "फ़ोन को उसकी तरफ़ करें (या कैमरा पेज पर ↻ दबाएँ); मैं ढूँढता रहूँगा।",
+        "kn": "📷 ಕ್ಯಾಮೆರಾ ಚಿತ್ರ ತಿರುಗಿತು, ಈಗ {zone} ಕಾಣುತ್ತಿಲ್ಲ, ಹಾಗಾಗಿ ನಿಯಮ {n} ಗಮನಿಸಲಾರದು. ಫೋನ್ ಅನ್ನು ಅದರ "
+              "ಕಡೆ ತಿರುಗಿಸಿ (ಅಥವಾ ಕ್ಯಾಮೆರಾ ಪುಟದಲ್ಲಿ ↻ ಒತ್ತಿ); ನಾನು ಹುಡುಕುತ್ತಲೇ ಇರುತ್ತೇನೆ.",
+    },
     "camera_view": {
         "en": "This is what the camera sees right now.",
         "hi": "कैमरे में अभी यह दिख रहा है।",
