@@ -218,8 +218,8 @@ def test_camera_view_warns_about_an_upright_picture(client):
 def test_language_is_learned_from_what_someone_writes(client, storage):
     member = storage.member_by_address("mock", PRIYA)
     assert member.speaks("hi") == "hi"  # nothing known yet: the household language
-    post(client, wa.text(PRIYA, "ok", "m1"))  # too short to tell
-    assert storage.member_by_address("mock", PRIYA).last_language is None
+    post(client, wa.text(PRIYA, "ok", "m1"))  # short, but nothing else is known yet: it counts
+    assert storage.member_by_address("mock", PRIYA).last_language == "en"
     post(client, wa.text(PRIYA, "can you check the room please", "m2"))
     assert storage.member_by_address("mock", PRIYA).speaks("hi") == "en"
     post(client, wa.text(PRIYA, "हाँ", "m3"))  # a Hindi word in Devanagari counts

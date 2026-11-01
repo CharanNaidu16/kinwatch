@@ -72,3 +72,12 @@ async def test_both_languages_are_written_when_both_are_notified(world, monkeypa
     assert sorted(written) == ["en", "hi"]
     alert = next(s for s in world.sent(world.priya) if s.buttons and s.buttons[0].id.startswith("claim:"))
     assert "बिस्तर" in alert.text
+
+
+async def test_short_commands_set_the_language_when_nothing_is_known(world):
+    assert world.priya.last_language is None
+    await world.say(world.priya, "rules")
+    assert world.storage.member_by_address("mock", world.priya.address).speaks("hi") == "en"
+    await world.say(world.priya, "पापा सोफ़े पर हैं?")  # a clear Hindi message still switches it
+    await world.say(world.priya, "rules")  # and a short command doesn't switch it back
+    assert world.storage.member_by_address("mock", world.priya.address).speaks("en") == "hi"

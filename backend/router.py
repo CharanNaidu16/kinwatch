@@ -311,8 +311,11 @@ class Router:
         return detect_language(message) if message and message.strip() else self.settings.household_language
 
     def _learn_language(self, member: Member, message: str) -> None:
-        """Remember the language someone writes in, so the whole conversation stays in it."""
+        """Remember the language someone writes in, so the whole conversation stays in it. While nothing is
+        known yet, even "delete 3" counts: it says more than the household default does."""
         lang = shown_language(message)
+        if lang is None and member.last_language is None and message.strip():
+            lang = detect_language(message)
         if lang is None:
             return
         if lang != member.last_language:
