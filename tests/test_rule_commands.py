@@ -93,3 +93,12 @@ async def test_hindi_command_gets_a_hindi_reply(world):
     await world.say(world.priya, f"नियम {rule_id} बंद")
     assert status(world, rule_id) == "paused"
     assert last(world, world.priya).startswith(f"⏸ नियम {rule_id} रोक दिया गया है")
+
+
+async def test_one_command_per_line_in_a_single_message(world):
+    first = await arm(world)
+    await world.say(world.priya, f"pause {first}")
+    await world.say(world.priya, f"Delete {first}\nrules")
+    assert status(world, first) == "deleted"
+    assert world.sent(world.priya)[-1].text.startswith("There are no rules yet")
+    assert world.storage.query_one("SELECT COUNT(*) AS n FROM rules WHERE status != 'deleted'")["n"] == 0

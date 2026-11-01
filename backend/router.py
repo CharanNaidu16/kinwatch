@@ -358,6 +358,11 @@ class Router:
             return await self._record(*rec, member)
         if is_claim(message) and self.alerts is not None and (alert_id := self.alerts.latest_for(member)):
             return await self.alerts.claim(alert_id, member)
+        lines = [line for line in message.splitlines() if line.strip()]
+        if len(lines) > 1 and all(rule_command(line) for line in lines):  # "delete 3" and "delete 4" in one message
+            for line in lines:
+                await self._rule_command(*rule_command(line), member, self._language(message, member))
+            return
         if command := rule_command(message):
             return await self._rule_command(*command, member, self._language(message, member))
         if conv.state == "awaiting_confirmation":
