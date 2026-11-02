@@ -23,7 +23,7 @@ MODELS = {
     "rule_pending": ["SAM 3.1", "engine"], "rule_returned": ["SAM 3.1", "engine"], "rule_fired": ["engine"],
     "rule_over": ["SAM 3.1", "engine"], "rule_baseline": ["SAM 3.1", "engine"], "alert_resent": ["engine"],
     "alert_escalated": ["engine"], "alert_expired": ["engine"], "zone_refreshed": ["SAM 3.1"],
-    "zone_missing": ["SAM 3.1"],
+    "zone_missing": ["SAM 3.1"], "alert_resolved": ["SAM 3.1", "engine"], "alert_back": ["SAM 3.1", "engine"],
 }
 
 

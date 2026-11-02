@@ -176,7 +176,7 @@ class RuleEngine:
             elif self.phase == Phase.FIRED:
                 self.phase = Phase.WATCHING
                 self.cooldown_until = ts + self.cooldown_sec
-                out.append(Transition("over", ts))
+                out.append(Transition("over", ts, {"back_at": self.debouncer.stable_since or ts}))
         out += self.tick(ts)
         return out
 

@@ -43,6 +43,7 @@ class World:
         self.watcher = Watcher(storage=storage, settings=settings, clock=clock, adapters=adapters,
                                frames=self.frames, household_id=hid, on_event=self.alerts.on_event)
         self.router.watcher, self.router.alerts = self.watcher, self.alerts
+        self.watcher.on_over = self.alerts.on_over  # as the app wires it
         self._ids = 0
 
     async def say(self, member, text=None, button=None):

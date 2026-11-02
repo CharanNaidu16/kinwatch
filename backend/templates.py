@@ -234,3 +234,42 @@ def alert(facts: EventFacts) -> str:
             "kn": " ಕೇಳಿದಾಗ ಯಾವುದೇ ಉತ್ತರ ಬರಲಿಲ್ಲ.",
         }[lang]
     return msg
+
+
+def back_notice(rule: Rule, back_hhmm: str, after_sec: float | None, lang: Language) -> str | None:
+    """The alerted situation is over ("Papa is back in the bed"). None for rules whose alert was the good
+    news itself (someone arrived at the door)."""
+    subj = subject_word(rule.subject, rule.subject_name, lang)
+    subj_cap = subj[0].upper() + subj[1:] if lang == "en" else subj
+    zone = zone_word(rule.zone_object, lang)
+    zone_obl = zone_word(rule.zone_object, lang, oblique=True)
+    t = spoken_time(back_hhmm, lang)
+    minutes = max(1, round(after_sec / 60)) if after_sec else None
+    after = {"en": f", after {spoken_duration(minutes * 60, lang)}", "hi": f", {spoken_duration(minutes * 60, lang)} बाद",
+             "kn": f", {spoken_duration(minutes * 60, lang)} ನಂತರ"}[lang] if minutes else ""
+    c = rule.condition
+    if c == Condition.ABSENT_FROM_ZONE:
+        return {
+            "en": f"✅ {subj_cap} is back in the {zone} ({t}{after}).",
+            "hi": f"✅ {subj} वापस {zone_obl} पर आ गए ({t} बजे{after})।",
+            "kn": f"✅ {subj} ಮತ್ತೆ {zone}ಗೆ ಬಂದರು ({t}ಕ್ಕೆ{after}).",
+        }[lang]
+    if c == Condition.ON_OBJECT:
+        return {
+            "en": f"✅ {subj_cap} is off the {zone} ({t}).",
+            "hi": f"✅ {subj} {zone_obl} से उतर गया ({t} बजे)।",
+            "kn": f"✅ {subj} {zone} ಮೇಲಿಂದ ಇಳಿಯಿತು ({t}ಕ್ಕೆ).",
+        }[lang]
+    if c == Condition.NO_PERSON_NEAR:
+        if rule.guard is not None:
+            return {
+                "en": f"✅ At {t} the flame was off or someone was near the {zone} again.",
+                "hi": f"✅ {t} बजे आग बंद थी या कोई फिर से {zone_obl} के पास था।",
+                "kn": f"✅ {t}ಕ್ಕೆ ಬೆಂಕಿ ಆರಿತ್ತು ಅಥವಾ ಯಾರೋ ಮತ್ತೆ {zone} ಹತ್ತಿರ ಇದ್ದರು.",
+            }[lang]
+        return {
+            "en": f"✅ Someone is near the {zone} again ({t}).",
+            "hi": f"✅ कोई फिर से {zone_obl} के पास है ({t} बजे)।",
+            "kn": f"✅ ಯಾರೋ ಮತ್ತೆ {zone} ಹತ್ತಿರ ಇದ್ದಾರೆ ({t}ಕ್ಕೆ).",
+        }[lang]
+    return None

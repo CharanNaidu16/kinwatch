@@ -38,6 +38,7 @@ ZONE_RETRY_SEC = 30  # after the picture changes shape, look for the zone again 
 EventHandler = Callable[[Rule, Transition, list[Frame], Zone, bool], Awaitable[None]]
 CameraHandler = Callable[[str, float], Awaitable[None]]  # ("lost" | "back", since)
 ZoneHandler = Callable[[Rule, str, bytes], Awaitable[None]]  # (rule, "found" | "missing", photo)
+OverHandler = Callable[[Rule, Transition], Awaitable[None]]  # the alerted situation has ended
 
 
 @dataclass
@@ -74,6 +75,7 @@ class Watcher:
     on_event: EventHandler | None = None
     on_camera: CameraHandler | None = None
     on_zone: ZoneHandler | None = None
+    on_over: OverHandler | None = None
     runtimes: dict[int, Runtime] = field(default_factory=dict)
     _last_call: dict[str, float] = field(default_factory=dict)
     _inflight: set[str] = field(default_factory=set)
@@ -311,6 +313,11 @@ class Watcher:
                     await self.on_event(rule, t, evidence, rt.zone, has_before)
                 except Exception:
                     log.exception("alert for rule %s failed", rule.id)
+            if t.kind == "over" and self.on_over is not None:
+                try:
+                    await self.on_over(rule, t)
+                except Exception:
+                    log.exception("'back' notice for rule %s failed", rule.id)
 
 
 def _describe(rule: Rule, t: Transition) -> str:

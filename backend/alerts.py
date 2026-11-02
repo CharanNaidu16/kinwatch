@@ -185,6 +185,35 @@ class Alerts:
             result = {"error": str(exc)[:200]}
         self.storage.execute("UPDATE events SET verification_json = ? WHERE id = ?", (json.dumps(result), event_id))
 
+    # --- the situation ended ------------------------------------------------------------------------
+
+    async def on_over(self, rule: Rule, over: Transition) -> None:
+        """Papa is back (or the stove is attended): tell everyone who got the alert, and stop escalating
+        an alert nobody has claimed yet."""
+        row = self.storage.query_one(
+            "SELECT a.id, a.status, a.language, e.started_at FROM alerts a JOIN events e ON e.id = a.event_id"
+            " WHERE e.rule_id = ? ORDER BY a.id DESC LIMIT 1", (rule.id,))
+        if row is None or self.storage.query_one(
+                "SELECT 1 FROM deliveries WHERE alert_id = ? AND kind = 'back'", (row["id"],)):
+            return
+        back_at = over.data.get("back_at", over.ts)
+        if templates.back_notice(rule, local_hhmm(back_at), None, "en") is None:
+            return  # an arrival rule: the alert itself was the good news
+        resolved = self.storage.execute(
+            "UPDATE alerts SET status = 'resolved', next_escalation_at = NULL WHERE id = ? AND status IN (?, ?)",
+            (row["id"], *CLAIMABLE)).rowcount == 1
+        members = self._members()
+        alerted = [members[i] for i in sorted(self._alerted(row["id"])) if i in members]
+        after = back_at - row["started_at"] if row["started_at"] else None
+
+        def notice(m: Member) -> str:
+            return templates.back_notice(rule, local_hhmm(back_at), after, m.speaks(row["language"]))
+        await asyncio.gather(*(self.send(m, "back", notice(m), alert_id=row["id"]) for m in alerted))
+        self.storage.add_timeline(self.household_id, over.ts, "alert_resolved" if resolved else "alert_back",
+                                  f"{local_hhmm(over.ts)} {templates.back_notice(rule, local_hhmm(back_at), after, 'en')}"
+                                  f" Told {', '.join(m.name for m in alerted)}.", rule_id=rule.id,
+                                  data={"alert_id": row["id"], "resolved": resolved})
+
     # --- claims -----------------------------------------------------------------------------------
 
     async def claim(self, alert_id: int, member: Member) -> None:
@@ -197,6 +226,9 @@ class Alerts:
         won = self.storage.execute(
             "UPDATE alerts SET status = 'claimed', claimed_by = ?, claimed_at = ?, next_escalation_at = NULL"
             " WHERE id = ? AND status IN (?, ?)", (member.id, now, alert_id, *CLAIMABLE)).rowcount == 1
+        if not won and self.storage.query_one("SELECT 1 FROM alerts WHERE id = ? AND status = 'resolved'",
+                                              (alert_id,)):
+            return await self.send(member, "info", text("alert_already_over", lang), alert_id=alert_id)
         if not won:
             holder = self.storage.query_one("SELECT m.name FROM alerts a JOIN members m ON m.id = a.claimed_by"
                                             " WHERE a.id = ?", (alert_id,))

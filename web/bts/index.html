@@ -213,6 +213,7 @@ function renderAlerts(alerts) {
   if (!alerts.length) { $("alerts").innerHTML = '<p class="empty">No alerts yet.</p>'; return; }
   $("alerts").innerHTML = alerts.map((a) => {
     const state = a.status === "claimed" ? `<span class="status armed">claimed by ${esc(a.claimed_by)}</span>`
+      : a.status === "resolved" ? '<span class="status armed">over before anyone claimed it</span>'
       : a.status === "expired" ? '<span class="status paused">nobody claimed it</span>'
       : `<span class="status paused">open · step ${a.level}</span>`;
     const check = a.check && a.check.visible_summary

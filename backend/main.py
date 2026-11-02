@@ -100,6 +100,7 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None, sto
                                                       n=str(rule.id)), jpeg=photo)
 
         watcher.on_zone = zone_notice
+        watcher.on_over = alerts.on_over
         app.state.router, app.state.alerts, app.state.watcher = router, alerts, watcher
         watcher.reload()
 
