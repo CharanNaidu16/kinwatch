@@ -416,7 +416,7 @@ class Router:
             caption += text("camera_view_upright", lang)
         await self.send(member, "info", caption, jpeg=frame.jpeg)
 
-    # --- recording takes for the replay link -------------------------------------------------------
+    # --- recording takes to replay ------------------------------------------------------------------
 
     async def _record(self, action: str, name: str | None, member: Member) -> None:
         rec = self.sessions

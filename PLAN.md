@@ -24,7 +24,7 @@ Kinwatch is a solo entry for the Meta Global AI Developer Hackathon (Indie track
 | Phone numbers | Live **only in `.env` and the SQLite database**, never in the repo, fixtures, logs or screenshots committed to git. Fixtures use placeholders like `<A_WA_ID>` |
 | Camera device | No spare old phone. Dev: laptop webcam in Chrome. Filming: your own Android phone as the camera (or borrow an old phone from a relative if one turns up) |
 | Papa | You play Papa yourself. The video says it is a re-enactment |
-| Hosting | **No paid hosting.** Development and demo filming run on your laptop with **Cloudflare Tunnel**. The judges' live link is a **replay-only build** (no live API calls) on a free Python host that may sleep and take a moment to wake. The README keeps full local run instructions. See §12 |
+| Hosting | **No hosting (3 Nov).** The submission is the **GitHub repo and the 3-minute video** only, so there is no deployed site. Development and filming run on the laptop with **Cloudflare Tunnel**. Replay mode stays as a local feature: anyone who clones the repo can play the kept sessions with `MODE=replay`, no API key needed. See §12 |
 
 **Test calls:** all 10 used (§7.4, 26–27 Oct). Auth, Spark structured output in Hindi, Spark multi-image vision, SAM on person / sofa / flame / dim light / door, and Voice Transcribe all work. Four design changes came out of them (§7.4). §7.1 comes from Meta's official docs, which I read on 26 Oct.
 
@@ -47,7 +47,7 @@ Kinwatch is a solo entry for the Meta Global AI Developer Hackathon (Indie track
 | **Impact (30%)** | Real problem in Indian families (parents living alone, children in other cities). No app install, no hardware, works in the chat app families already use, works in Hindi and Kannada voice notes. Family claim and escalation answer "who is handling it?", which single-recipient alerts don't. | Video 0:00–0:35, README "Problem" |
 | **Use of Meta AI tooling (25%)** | Three Meta models chained, each doing something a basic integration wouldn't. **Muse Voice Transcribe:** Hindi and Kannada voice notes with code-switching (plus check-in answers in the stretch goal). **Muse Spark:** (a) compiles a sentence into a rule JSON using schema-constrained output, (b) resolves "no, the other bed" against a numbered SAM snapshot, (c) checks the event against several frames, (d) writes the alert in the family's language. **SAM 3.1:** concept segmentation used as geometry (mask overlap gives the state), multi-instance numbering for disambiguation, and a stretch goal of video tracking on the alert clip. | Behind-the-scenes page, video 2:30 |
 | **Technical depth (20%)** | Deterministic temporal engine (no AI deciding timing) with debouncing, midnight-crossing windows and occurrence tracking. Mock and real adapters, with replay tests on recorded frames and a fake clock. Budget module with hard caps and a reserve kept for alerts. Atomic claim handling. Verified webhooks. Model output is always validated, with template fallbacks. The design is "verifiable agent" style: every decision is logged with its evidence. | Tests, README architecture, timeline |
-| **Demo (25%)** | Works live on real phones. One engine, three scenarios, no code changes between them. Shows the "here's what I understood" outline moment and two phones claiming. The live link is a **replay demo**: a real recorded session played back from its stored results, with no API calls and no cost, so it can't break or burn credits during judging. | Video, live link |
+| **Demo (25%)** | Works live on real phones. One engine, three scenarios, no code changes between them. Shows the "here's what I understood" outline moment and two phones claiming. Judged from the **3-minute video**; the repo also carries real recorded sessions that play back locally with no API calls. | Video, repo |
 
 ---
 
@@ -184,7 +184,6 @@ kinwatch/
   tests/                         unit + replay tests
   fixtures/                      recorded frames, API responses, transcripts; sessions/ for replay mode
   scratch/                       throwaway API experiments (gitignored)
-  render.yaml               +    replay-only deploy config (MODE=replay, no secrets)
   .env.example, README.md, LICENSE, requirements.txt
 ```
 
@@ -829,7 +828,7 @@ Total is well under $0.10. **Step 0 outputs stay in `scratch/` only (gitignored)
 **Hours:** weekday evenings are about 7:00–11:30 PM minus workshops and office hours. **Full days (≈10 h): Fri 30 Oct, Sat 31 Oct, Sun 1 Nov, Tue 3 Nov.**
 
 **Priorities:**
-- **P0** (must ship): features 1 and 2 on the core loop, **reliability of that loop**, the replay deploy and the video.
+- **P0** (must ship): features 1 and 2 on the core loop, **reliability of that loop**, the README and the video. (The replay deploy was dropped on 3 Nov: the submission is the repo and the video.)
 - **P1**: WhatsApp templates (outside the 24 h window), check-in (built Sat 31 Oct, go/no-go Sun 1 Nov evening), Kannada door scenario.
 - **P2**: SAM-tracked alert clip, face blur.
 
@@ -983,7 +982,12 @@ Every failure gets a recorded fixture and a replay test before it is fixed (fixt
 
 ## 12. Deployment
 
-There are two deployments, both free:
+> **3 Nov: no deployment.** The submission is the GitHub repo and the 3-minute video, so the
+> judges' replay site below was dropped. Replay mode remains in the code for local use: clone the
+> repo and run `MODE=replay uvicorn backend.main:app` to play the sessions in `fixtures/sessions/`
+> with no API key. The rest of this section is kept as originally planned.
+
+There were two deployments planned, both free:
 
 | | Full version (`MODE=live`) | Judges' live link (`MODE=replay`) |
 |---|---|---|
@@ -1016,7 +1020,7 @@ There are two deployments, both free:
 4. Live: set `META_API_KEY` and the WhatsApp variables (test number, System User token, app secret, verify token), then run `python scripts/dev_up.py`.
 5. WhatsApp: a section with the dashboard steps (test number, verified recipients, webhook, subscribed apps, templates).
 
-**Is GitHub alone enough?** No. Judges get a public repo, a live product link and a video. The replay URL is the live link; the README points to it, to the video, and to the local instructions for the full version.
+**Is GitHub alone enough?** Yes, as of 3 Nov: the submission asks for the repo and a 3-minute video. The README points to the video and to the local instructions for the full version.
 
 ---
 
@@ -1034,7 +1038,7 @@ Captions on screen; Hindi lines subtitled in English. "Re-enactment" label at th
 | 1:40–2:05 | **Feature 1.** Alert lands on A's and B's phones with the photo + Hindi text. A is busy; 30 s later a re-send and escalation; B taps "मैं देख लूँगा"; A's phone: "राहुल इसे देख रहे हैं" | VO: "Muse Spark checks the frames and writes only what was seen and when. The family responds together, and if nobody does, it escalates." |
 | 2:05–2:25 | **Same engine, new situations.** Typed English stove rule: snapshot with stove + flame outlined; step away; alert. Then 6 s of the Kannada door rule: "ಅಪ್ಪ ವಾಕಿಂಗ್ ಮುಗಿಸಿ ಬಾಗಿಲಿಗೆ ಬಂದ್ರೆ ಹೇಳು," you walk in, and a light alert with the photo | VO: "One engine. No code changes. English, Hindi, Kannada." |
 | 2:25–2:48 | Behind-the-scenes page: sentence, transcript, rule JSON side by side; SAM masks; timeline; budget meter (total spent so far) | VO: "Three Meta models: Muse Voice Transcribe hears the voice note, Muse Spark turns it into a checked rule and writes the alert, SAM 3.1 sees the bed, the person, the flame." |
-| 2:48–3:00 | Back to the dim room; Papa back in bed | VO: "No app. No new hardware. No diagnosis. Just your family, together." Card: repo URL, live URL, "Built 27 Oct – 4 Nov 2026 for the Meta Global AI Developer Hackathon" |
+| 2:48–3:00 | Back to the dim room; Papa back in bed | VO: "No app. No new hardware. No diagnosis. Just your family, together." Card: repo URL, "Built 27 Oct – 4 Nov 2026 for the Meta Global AI Developer Hackathon" |
 
 If the check-in works, swap 0:30–0:42 for a 12 s check-in moment at 1:30 ("पापा, आप ठीक हैं?" then silence, then "he didn't respond" in the alert).
 
@@ -1056,7 +1060,7 @@ If the check-in works, swap 0:30–0:42 for a 12 s check-in moment at 1:30 ("प
 
 ## 14. README outline
 
-1. **Kinwatch**: the one-liner, demo GIF, links (replay demo, video). One line explaining that the live link replays a recorded real session with no API calls, and the full version runs locally.
+1. **Kinwatch**: the one-liner, demo GIF, the video link. The full version runs locally; recorded sessions replay locally with no API calls.
 2. **The problem**: families, moments over time, "who's handling it."
 3. **How it works**: the two flows (diagram), the three features, example messages in Hindi, Kannada and English.
 4. **Architecture**: modules, the temporal engine, the budget guard, mock/real adapters.
@@ -1078,12 +1082,11 @@ If the check-in works, swap 0:30–0:42 for a 12 s check-in moment at 1:30 ("प
 - [ ] GitHub repo **public**; first commit dated ≥ 27 Oct; history shows steady work
 - [ ] `git log -p | grep -i -E "api_key|token|secret|\+91"` is clean; `.env`, `scratch/` and `data/` are gitignored; keys rotated if anything leaked
 - [ ] README complete (§14); Meta models named; "built during the hackathon" section
-- [ ] Replay live link works logged out on a phone and a laptop, including after it has slept; all three sessions play; replay banner visible; host has no secrets
 - [ ] Video exactly ≤3:00, public or unlisted link opens logged out; shows only hackathon-built work; "re-enactment" and "demo mode" captions present
 - [ ] No medical advice anywhere: messages, README, video, Devpost-style text
 - [ ] No third-party code, footage, music or logos without rights (use royalty-free music or none)
 - [ ] Theme stated: Build for Your World
-- [ ] Cerebral Valley form: repo URL, video URL, live URL, description, Meta models used
+- [ ] Cerebral Valley form: repo URL, video URL, description, Meta models used
 - [ ] Final billing check; set `USE_MOCKS` / caps for the judging period
 - [ ] Submitted by ~10:30 PM IST Wed 4 Nov (deadline Thu 5 Nov 7:30 AM IST)
 
@@ -1112,7 +1115,6 @@ If the check-in works, swap 0:30–0:42 for a 12 s check-in moment at 1:30 ("प
 - Free-credit data-use terms versus "Standard mode is not used for training" (billing page)
 - `meta_sam_parser` "SAM License" terms for use as a dependency in an MIT repo
 - WhatsApp: Graph API version; template approval on a test WABA; utility template pricing for India; video codec requirements for sending MP4 without audio
-- Render free tier: wake-up time, whether a card is required, memory limit (fallbacks: Koyeb, HF Spaces)
 - Discord answer (asked Tue 27 Oct): is a replay-only live link acceptable?
 - WhatsApp delivery of the 27 Oct "Kinwatch test" text (HTTP 200, `wamid` returned) and of the dashboard `hello_world` sends; needs the status webhook (§6.1)
 - Whether the `kinwatch_alert` / `kinwatch_update` templates are approved as UTILITY with the drafted wording

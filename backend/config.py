@@ -87,9 +87,9 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _replay_never_holds_a_key(self) -> Settings:
-        # The judges' replay deployment must not be able to reach the Meta API, even by mistake.
+        # Replay mode only plays recorded sessions: it must not be able to reach the Meta API, even by mistake.
         if self.mode == "replay" and self.meta_api_key and self.meta_api_key.get_secret_value():
-            raise ValueError("MODE=replay refuses to start while META_API_KEY is set; remove it from this deployment")
+            raise ValueError("MODE=replay refuses to start while META_API_KEY is set; remove it to replay")
         return self
 
     @property

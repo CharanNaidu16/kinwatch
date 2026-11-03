@@ -157,7 +157,7 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None, sto
 
     @app.get("/api/replay/sessions")
     async def replay_sessions(request: Request) -> dict:
-        """Kept sessions (the replay link's), plus this laptop's recorded takes in live mode."""
+        """Kept sessions (in the repo), plus this laptop's recorded takes in live mode."""
         if replay:
             return {"mode": "replay", "kept": list_sessions(KEPT_DIR), "takes": []}
         require_bts_token(request)
@@ -208,7 +208,7 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None, sto
         require_bts_token(request)
         return request.app.state.budget.summary()
 
-    if settings.mode == "live":  # replay deployments have no camera (PLAN.md §3.10)
+    if settings.mode == "live":  # replay mode has no camera (PLAN.md §3.10)
         @app.get("/phone", include_in_schema=False)
         async def phone_page() -> FileResponse:
             return FileResponse(PHONE_PAGE, media_type="text/html", headers={"Cache-Control": "no-store"})

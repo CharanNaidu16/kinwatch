@@ -1,4 +1,4 @@
-"""Recorded sessions for the replay link (PLAN.md §3.10).
+"""Recorded sessions, played back on the behind-the-scenes page (PLAN.md §3.10).
 
 Recording happens only between "record start" and "record stop" (admins, in the chat). A take is a
 folder under data/sessions/ (gitignored): the behind-the-scenes state every couple of seconds, the
@@ -173,7 +173,7 @@ def list_sessions(root: Path) -> list[dict]:
     return out
 
 
-# --- keeping a take for the replay link ------------------------------------------------------------------
+# --- keeping a take in the repo ------------------------------------------------------------------------
 
 def _scrub(value, names: dict[str, str]):
     if isinstance(value, str):

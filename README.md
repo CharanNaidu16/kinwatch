@@ -60,17 +60,20 @@ Everyone gets messages in the language they write in (English, Hindi or Kannada)
 The bot also sends a **behind-the-scenes** link: each rule from sentence to Muse Spark's JSON to
 the SAM 3.1 zone to the engine's timer, the live camera with outlines, the timeline and API cost.
 
-### Recording a session for the replay link
+### Recording and replaying a session
 
 1. Send `record start`, do the run, send `record stop`. The take is saved in `data/sessions/`
    (never committed) and listed under "Recorded takes" on the behind-the-scenes page to watch.
-2. Keep the good ones, trimmed, with family names swapped for sample names:
+2. Keep the good ones in the repo, trimmed, with family names swapped for sample names:
    ```bash
    python scripts/sessions.py list
-   python scripts/sessions.py keep take-2 --as sofa-demo --from 40 --to 250 --title "Sofa: alert and claim"
+   python scripts/sessions.py keep take-2 --as bed-demo --from 40 --to 250 --title "Bed: alert and claim"
    ```
-3. Commit `fixtures/sessions/sofa-demo`. `MODE=replay uvicorn backend.main:app` serves only kept
-   sessions, makes no API calls and refuses to start if `META_API_KEY` is set.
+3. Anyone who clones the repo can watch the kept sessions with no API key and no camera:
+   ```bash
+   MODE=replay uvicorn backend.main:app   # then open http://127.0.0.1:8000/bts
+   ```
+   Replay mode makes no API calls and refuses to start if `META_API_KEY` is set.
 
 ## Check your Meta API key (about $0.02)
 
