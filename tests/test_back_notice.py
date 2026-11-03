@@ -69,6 +69,15 @@ async def test_the_back_notice_is_sent_once(world):
     assert len(backs) == 1
 
 
+async def test_back_notice_comes_with_the_camera_picture(world):
+    await fire(world)
+    for _ in range(4):
+        await world.see(IN_BED)
+    back = world.sent(world.priya)[-1]
+    assert back.text.startswith("✅ Papa is back")
+    assert back.kind == "image" and back.jpeg == world.frames.latest().jpeg  # as the camera took it
+
+
 async def test_back_notice_in_the_readers_language(world):
     alert_id = await fire(world)
     world.storage.execute("UPDATE members SET last_language = 'hi' WHERE id = ?", (world.priya.id,))

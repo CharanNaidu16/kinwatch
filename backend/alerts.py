@@ -187,9 +187,10 @@ class Alerts:
 
     # --- the situation ended ------------------------------------------------------------------------
 
-    async def on_over(self, rule: Rule, over: Transition) -> None:
-        """Papa is back (or the stove is attended): tell everyone who got the alert, and stop escalating
-        an alert nobody has claimed yet."""
+    async def on_over(self, rule: Rule, over: Transition, frame: Frame | None = None,
+                      zone: Zone | None = None) -> None:
+        """Papa is back (or the stove is attended): tell everyone who got the alert, with the camera's
+        picture of it, and stop escalating an alert nobody has claimed yet."""
         row = self.storage.query_one(
             "SELECT a.id, a.status, a.language, e.started_at FROM alerts a JOIN events e ON e.id = a.event_id"
             " WHERE e.rule_id = ? ORDER BY a.id DESC LIMIT 1", (rule.id,))
@@ -205,10 +206,14 @@ class Alerts:
         members = self._members()
         alerted = [members[i] for i in sorted(self._alerted(row["id"])) if i in members]
         after = back_at - row["started_at"] if row["started_at"] else None
+        photo = None
+        if frame is not None:
+            photo = await asyncio.to_thread(draw, frame.jpeg, [zone.mask] if zone is not None else [],
+                                            numbered=False, outline=self.settings.chat_outlines)
 
         def notice(m: Member) -> str:
             return templates.back_notice(rule, local_hhmm(back_at), after, m.speaks(row["language"]))
-        await asyncio.gather(*(self.send(m, "back", notice(m), alert_id=row["id"]) for m in alerted))
+        await asyncio.gather(*(self.send(m, "back", notice(m), jpeg=photo, alert_id=row["id"]) for m in alerted))
         self.storage.add_timeline(self.household_id, over.ts, "alert_resolved" if resolved else "alert_back",
                                   f"{local_hhmm(over.ts)} {templates.back_notice(rule, local_hhmm(back_at), after, 'en')}"
                                   f" Told {', '.join(m.name for m in alerted)}.", rule_id=rule.id,
