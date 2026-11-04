@@ -32,6 +32,7 @@ log = logging.getLogger("kinwatch.watcher")
 
 SUBJECT_CONCEPTS = {Subject.PERSON: "person", Subject.DOG: "dog", Subject.CAT: "cat", Subject.FLAME: "flame"}
 GUARD_STALE_SEC = 90  # a guard reading older than this counts as unknown
+FLAME_INTERVAL_SEC = 10.0  # the flame is looked for this often, changed picture or not
 CAMERA_LOST_SEC = 120  # no frame for this long while a rule is watching: tell the family once
 ZONE_RETRY_SEC = 30  # after the picture changes shape, look for the zone again at most this often
 
@@ -141,6 +142,9 @@ class Watcher:
         last = self._last_call.get(concept)
         if last is not None and now - last < self.settings.sam_min_interval_sec:
             return False
+        if concept == SUBJECT_CONCEPTS[Subject.FLAME]:
+            # A flame flickers, so every frame looks "changed"; whether it is on changes slowly.
+            return last is None or now - last >= FLAME_INTERVAL_SEC
         if any(rt.engine.settling for rt in users):
             return True  # confirm a fresh change quickly (still no closer than the minimum interval)
         busy = any(rt.engine.phase in (Phase.PENDING, Phase.WAITING_BASELINE) for rt in users)
