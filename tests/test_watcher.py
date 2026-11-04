@@ -224,11 +224,14 @@ async def test_no_camera_notice_when_nothing_is_armed(world):
 
 
 def test_a_flickering_flame_is_looked_for_every_10_seconds_not_every_frame(world):
-    from backend.watcher import FLAME_INTERVAL_SEC
+    from backend.schemas import Subject
+    from backend.watcher import FLAME_INTERVAL_SEC, SUBJECT_CONCEPTS
+
+    FLAME = SUBJECT_CONCEPTS[Subject.FLAME]
 
     frame = load_frame(synthetic_frame(EMPTY), world.clock.now())
     now = world.clock.now()
-    assert world.watcher._due("flame", [], frame, now)  # never looked yet
-    world.watcher._last_call["flame"] = now
-    assert not world.watcher._due("flame", [], frame, now + FLAME_INTERVAL_SEC - 1)  # changed picture or not
-    assert world.watcher._due("flame", [], frame, now + FLAME_INTERVAL_SEC)
+    assert world.watcher._due(FLAME, [], frame, now)  # never looked yet
+    world.watcher._last_call[FLAME] = now
+    assert not world.watcher._due(FLAME, [], frame, now + FLAME_INTERVAL_SEC - 1)  # changed picture or not
+    assert world.watcher._due(FLAME, [], frame, now + FLAME_INTERVAL_SEC)

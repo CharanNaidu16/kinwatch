@@ -30,7 +30,10 @@ from backend.zones import load_candidates, save_candidates
 
 log = logging.getLogger("kinwatch.watcher")
 
-SUBJECT_CONCEPTS = {Subject.PERSON: "person", Subject.DOG: "dog", Subject.CAT: "cat", Subject.FLAME: "flame"}
+# A gas flame is small and pale blue: on real stove frames (4 Nov) SAM found nothing for "flame",
+# "blue flame", "gas flame" or "fire", but found the burner that was on as "lit burner" (0.84), and
+# not the one that was off.
+SUBJECT_CONCEPTS = {Subject.PERSON: "person", Subject.DOG: "dog", Subject.CAT: "cat", Subject.FLAME: "lit burner"}
 GUARD_STALE_SEC = 90  # a guard reading older than this counts as unknown
 FLAME_INTERVAL_SEC = 10.0  # the flame is looked for this often, changed picture or not
 CAMERA_LOST_SEC = 120  # no frame for this long while a rule is watching: tell the family once

@@ -28,6 +28,7 @@ PALETTE: dict[str, list[tuple[int, int, int]]] = {
     "dog": [(240, 240, 120)],
 }
 PALETTE["door"] = PALETTE["main door"]
+PALETTE["lit burner"] = PALETTE["flame"]  # what the watcher asks SAM for a gas flame
 PALETTE["stove"] = PALETTE["gas stove"]
 
 TOLERANCE = 40  # max per-channel distance from the key colour
