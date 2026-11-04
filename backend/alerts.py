@@ -111,16 +111,21 @@ class Alerts:
                            started_at_local=local_hhmm(since), met_at_local=local_hhmm(fired.ts),
                            duration_min=max(1, round(rule.duration_sec / 60)) if rule.duration_sec else 0,
                            visibility=fired.data.get("visibility", "good"), language=rule.language)
-        latest = evidence[-1]
-        photo = await asyncio.to_thread(draw, latest.jpeg, [zone.mask], numbered=False,
-                                        outline=self.settings.chat_outlines)
+        # No frame at all (the rule's time ran out on a tick, before the camera sent one after a
+        # restart): the family is still told, without a photo.
+        photo = None
+        if evidence:
+            photo = await asyncio.to_thread(draw, evidence[-1].jpeg, [zone.mask], numbered=False,
+                                            outline=self.settings.chat_outlines)
         event_id = self.storage.execute(
             "INSERT INTO events (rule_id, started_at, met_at, facts_json, status) VALUES (?, ?, ?, ?, 'sent')",
             (rule.id, since, fired.ts, facts.model_dump_json())).lastrowid
-        folder = self.settings.data_path / "events" / str(event_id)
-        folder.mkdir(parents=True, exist_ok=True)
-        (folder / "snapshot.jpg").write_bytes(photo)
-        self.storage.execute("UPDATE events SET snapshot_path = ? WHERE id = ?", (str(folder / "snapshot.jpg"), event_id))
+        if photo is not None:
+            folder = self.settings.data_path / "events" / str(event_id)
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "snapshot.jpg").write_bytes(photo)
+            self.storage.execute("UPDATE events SET snapshot_path = ? WHERE id = ?",
+                                 (str(folder / "snapshot.jpg"), event_id))
 
         members = self._members()
         recipients = [members[i] for i in rule.notify if i in members]
@@ -142,9 +147,10 @@ class Alerts:
                                   rule_id=rule.id, data={"event_id": event_id, "alert_id": alert_id, "text": message,
                                                          "languages": languages, **writer})
 
-        task = asyncio.create_task(self._verify(event_id, rule, evidence, has_before))
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+        if evidence:  # nothing to check without frames
+            task = asyncio.create_task(self._verify(event_id, rule, evidence, has_before))
+            self._tasks.add(task)
+            task.add_done_callback(self._tasks.discard)
         return alert_id
 
     @staticmethod

@@ -291,7 +291,7 @@ class Router:
                 await self._dispatch(inbound, member, lang)
             except BudgetExceeded as exc:
                 log.warning("budget refused while handling %s: %s", inbound, exc.reason)
-                await self.send(member, "info", text("error", lang))
+                await self.send(member, "info", text("over_limit", lang))
             except Exception:
                 log.exception("failed to handle %s", inbound)
                 await self.send(member, "info", text("error", lang))

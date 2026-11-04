@@ -110,3 +110,30 @@ def test_back_notice_wording():
     stove = rule(Condition.NO_PERSON_NEAR, Guard(subject=Subject.FLAME, zone_object="gas stove"))
     assert templates.back_notice(stove, "19:50", 60, "en") == \
         "✅ At 7:50 PM the flame was off or someone was near the gas stove again."
+
+
+async def test_an_alert_without_any_camera_picture_still_goes_out(world):
+    """The rule's time ran out on a tick right after a restart, before the camera sent a frame."""
+    import numpy as np
+
+    from backend.engine import Transition
+    from backend.vision import Zone
+
+    rule_id = await arm(world)
+    rule = world.storage.get_rule(rule_id)
+    zone = Zone.from_mask(np.ones((48, 64), dtype=bool), "bed")
+    now = world.clock.now()
+    await world.alerts.on_event(rule, Transition("fired", now, {"since": now - 60}), [], zone)
+    alert = world.sent(world.priya)[-1]
+    assert alert.kind == "text" and alert.buttons  # told, with the "I've got it" button, no photo
+
+
+async def test_a_refused_model_call_says_so(world, monkeypatch):
+    from backend.budget import BudgetExceeded
+
+    async def refuse(*args, **kwargs):
+        raise BudgetExceeded("SAM per-hour cap (300)")
+
+    monkeypatch.setattr(world.router.adapters.spark, "parse_rule", refuse)
+    await world.say(world.priya, "Tell me if Papa leaves the bed for 5 minutes")
+    assert world.sent(world.priya)[-1].text.startswith("I've reached my safety limit")

@@ -55,6 +55,11 @@ _TEXTS: dict[str, dict[Language, str]] = {
         "hi": "ठीक है, मैंने यह नियम नहीं बनाया। फिर से बताइए कि किस पर नज़र रखूँ।",
         "kn": "ಸರಿ, ನಾನು ಈ ನಿಯಮ ಮಾಡಲಿಲ್ಲ. ಯಾವುದರ ಮೇಲೆ ಗಮನ ಇಡಬೇಕು ಎಂದು ಮತ್ತೆ ಹೇಳಿ.",
     },
+    "over_limit": {
+        "en": "I've reached my safety limit for camera checks for now, so I can't do this yet. Please try again in a few minutes.",
+        "hi": "कैमरा जाँच की मेरी सुरक्षा सीमा अभी पूरी हो गई है, इसलिए मैं यह अभी नहीं कर सकता। कुछ मिनट बाद फिर कोशिश करें।",
+        "kn": "ಕ್ಯಾಮೆರಾ ಪರಿಶೀಲನೆಯ ನನ್ನ ಸುರಕ್ಷತಾ ಮಿತಿ ಈಗ ಮುಗಿದಿದೆ, ಆದ್ದರಿಂದ ಇದನ್ನು ಈಗ ಮಾಡಲಾರೆ. ಕೆಲವು ನಿಮಿಷಗಳ ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    },
     "error": {
         "en": "Sorry, something went wrong on my side. Please try again in a minute.",
         "hi": "माफ़ कीजिए, मेरी तरफ़ से कुछ गड़बड़ हो गई। एक मिनट बाद फिर कोशिश करें।",
