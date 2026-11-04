@@ -192,11 +192,13 @@ class Alerts:
         """Papa is back (or the stove is attended): tell everyone who got the alert, with the camera's
         picture of it, and stop escalating an alert nobody has claimed yet."""
         row = self.storage.query_one(
-            "SELECT a.id, a.status, a.language, e.started_at FROM alerts a JOIN events e ON e.id = a.event_id"
+            "SELECT a.id, a.status, a.language, e.started_at, e.met_at FROM alerts a JOIN events e ON e.id = a.event_id"
             " WHERE e.rule_id = ? ORDER BY a.id DESC LIMIT 1", (rule.id,))
         if row is None or self.storage.query_one(
                 "SELECT 1 FROM deliveries WHERE alert_id = ? AND kind = 'back'", (row["id"],)):
             return
+        if row["met_at"] is not None and over.ts - row["met_at"] > RECENT_ALERT_SEC:
+            return  # last night's alert: "back after 21 hours" would only confuse the family
         back_at = over.data.get("back_at", over.ts)
         if templates.back_notice(rule, local_hhmm(back_at), None, "en") is None:
             return  # an arrival rule: the alert itself was the good news

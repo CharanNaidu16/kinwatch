@@ -69,6 +69,16 @@ async def test_the_back_notice_is_sent_once(world):
     assert len(backs) == 1
 
 
+async def test_no_back_notice_for_an_alert_from_hours_ago(world):
+    await fire(world)
+    for _ in range(3):
+        await timeout(world)  # nobody claimed it: expired
+    world.clock.advance(20 * 60 * 60)  # the camera was off overnight; Papa is seen in bed the next evening
+    for _ in range(4):
+        await world.see(IN_BED)
+    assert not [s for s in world.sent(world.priya) if s.text.startswith("✅ Papa is back")]
+
+
 async def test_back_notice_comes_with_the_camera_picture(world):
     await fire(world)
     for _ in range(4):
