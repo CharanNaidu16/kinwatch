@@ -26,9 +26,9 @@ nobody knows who is dealing with an alert.
 
 | | |
 |---|---|
-| **Set a rule by talking** | "If Papa gets up from the bed and isn't back in 5 minutes, tell me and Ronny." Typed or a voice note, in English, Hindi, Kannada or Hinglish. |
-| **See what it understood** | Before anything is armed, Kinwatch replies with a camera photo and the rule in plain words: *"If Papa leaves the bed and isn't back within 5 minutes, I'll tell Charan and Ronny. Correct?"* Nothing runs until you say yes. |
-| **Alert the family, together** | The alert arrives with a photo and an **I've got it** button. The first tap wins and everyone else sees "Ronny is handling it". Nobody answers? It is re-sent, then escalated to the next family member. |
+| **Set a rule by talking** | "If Papa gets up from the bed and isn't back in 5 minutes, tell me and Rahul." Typed or a voice note, in English, Hindi, Kannada or Hinglish. |
+| **See what it understood** | Before anything is armed, Kinwatch replies with a camera photo and the rule in plain words: *"If Papa leaves the bed and isn't back within 5 minutes, I'll tell Priya and Rahul. Correct?"* Nothing runs until you say yes. |
+| **Alert the family, together** | The alert arrives with a photo and an **I've got it** button. The first tap wins and everyone else sees "Rahul is handling it". Nobody answers? It is re-sent, then escalated to the next family member. |
 | **Close the loop** | When the situation ends, everyone who was alerted gets *"✅ Papa is back in the bed (6:52 PM, after 9 minutes)"* with a fresh photo. |
 | **Ask the camera** | "Is the gas stove on?", "ಸೋಫಾ ಮೇಲೆ ಯಾರಾದರೂ ಇದ್ದಾರಾ?" (is anyone on the sofa?). Answered from the camera right now, with a photo, in the language you asked in. |
 | **Each person, their language** | Everyone gets messages in the language they write in. |
