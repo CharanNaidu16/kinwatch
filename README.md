@@ -5,7 +5,7 @@ Say what to watch in the family chat, by text or voice note. Kinwatch shows exac
 on a photo before it starts. When something happens, the whole family gets the alert, sees who is
 handling it, and is told when it's over.
 
-▶ **Demo video (3 min):** _link coming_ · Built for the **Meta Global AI Developer Hackathon**
+▶ **[Demo video (3 min)](https://youtu.be/dGv-Pzq6f8s)** · Built for the **Meta Global AI Developer Hackathon**
 (Indie track, "Build for Your World"), 27 Oct – 4 Nov 2026, with **Muse Spark 1.3, SAM 3.1 and
 Muse Voice Transcribe**.
 
