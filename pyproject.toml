@@ -1,7 +1,7 @@
 [project]
 name = "kinwatch"
 version = "0.1.0"
-description = "A family member with eyes that lives in your WhatsApp."
+description = "Turn any old phone into a camera your family programs by just telling it."
 requires-python = ">=3.11"
 license = { text = "MIT" }
 
